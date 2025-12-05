@@ -1,22 +1,23 @@
 body {
-    background-color: white;
+	background-color: white;
 }
 
 p {
-    color: black;
+	color: black;
 }
 
-html, body {
-  margin: 0;
-  height: 100%;
+html,
+body {
+	margin: 0;
+	height: 100%;
 }
 
 #scene {
-  background: red; /* Temporary background color for visibility */
-  width: 100%;
-  height: 100%;
-  display: block;
-  position: absolute;
-  top: 0;
-  left: 0;
+	background: red; /* Debug! Error if shown! */
+	width: 100%;
+	height: 100%;
+	display: block;
+	position: absolute;
+	top: 0;
+	left: 0;
 }
