@@ -1,17 +1,16 @@
-//game.js
+//setup.js
 import { CONFIG } from './config.js';
 import { updateShadowPosition } from './scene.js';
 
-export class Game {
+export class Setup {
     constructor(scene, floorManager, sphereManager, inputHandler, cameraController, sunLight) {
         this.scene = scene;
         this.floorManager = floorManager;
         this.sphereManager = sphereManager;
         this.inputHandler = inputHandler;
         this.cameraController = cameraController;
-        this.sunLight = sunLight; // Store it as instance property
+        this.sunLight = sunLight;
         this.lastTime = performance.now();
-        this.lastFloorSpawn = performance.now();
     }
 
     update(currentTime) {
@@ -22,15 +21,6 @@ export class Game {
 
         // Handle input
         this.inputHandler.handleInput(mainSphere, dt);
-
-        // Spawn floor under ball
-        /*
-        if (currentTime - this.lastFloorSpawn >= CONFIG.floorSpawnInterval) {
-            const pos = mainSphere.position;
-            const floor = this.floorManager.createFloor(pos.x, pos.y, pos.z);
-            this.lastFloorSpawn = currentTime;
-        }
-        */
 
         // Update physics
         this.sphereManager.applyGravity();

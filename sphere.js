@@ -2,6 +2,7 @@ import * as THREE from 'https://unpkg.com/three@0.181.0/build/three.module.js';
 import { PhysicsObject } from './physics.js';
 import { createRotatingMaterial } from './material.js';
 import { CONFIG } from './config.js';
+import { GLOBALS } from './globals.js';
 
 export class SphereManager {
     constructor(scene) {
@@ -26,6 +27,7 @@ export class SphereManager {
             
         this.scene.add(sphere.mesh);
         this.spheres.push(sphere);
+        GLOBALS.player.PhysicsObject = sphere;
     }
 
     applyGravity() {

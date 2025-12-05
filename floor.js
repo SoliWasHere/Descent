@@ -8,10 +8,10 @@ export class FloorManager {
         this.floors = [];
     }
 
-    createFloor(x, y, z) {
+    createFloor(x, y, z, sx = 10, sy = 1, sz = 10, rx = 0, ry = 0, rz = 0) {
         const floor = new PhysicsObject(
-            new THREE.BoxGeometry(CONFIG.floorWidth, CONFIG.floorHeight, CONFIG.floorDepth),
-            new THREE.MeshStandardMaterial({ 
+            new THREE.BoxGeometry(sx, sy, sz),
+            new THREE.MeshStandardMaterial({
                 color: 0xFFFFFF,
                 roughness: 0.8 
             }),
@@ -20,13 +20,17 @@ export class FloorManager {
             new THREE.Vector3(0, 0, 0)
         );
 
-        floor.width = CONFIG.floorWidth;
-        floor.height = CONFIG.floorHeight;
-        floor.depth = CONFIG.floorDepth;
+        floor.width = sx;
+        floor.height = sy;
+        floor.depth = sz;
         floor.friction = CONFIG.floorFriction;
         floor.restitution = CONFIG.floorRestitution;
 
         floor.mesh.receiveShadow = true;
+
+        floor.rotateX(rx);
+        floor.rotateY(ry);
+        floor.rotateZ(rz);
 
         this.scene.add(floor.mesh);
         this.floors.push(floor);
