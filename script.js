@@ -3,40 +3,40 @@ import { PhysicsObject, CollisionHelper } from './physics.js';
 import { createRotatingMaterial } from './material.js';
 
 // ============================================================================
+// Configuration
+// ============================================================================
+
+const CONFIG = {
+    floorWidth: 12,
+    floorHeight: 0.8,
+    floorDepth: 12,
+    floorFriction: 1,
+    floorRestitution: 0.5,
+    numSpheres: 1,
+    sphereStartY: 50,
+    gravity: -9.81,
+    forceMagnitude: 1000, 
+    cameraShiftSpeed: 20,
+    floorSpawnInterval: 10, // milliseconds
+};
+
+// ============================================================================
 // Scene Setup
 // ============================================================================
 
-/**
- * Main canvas element for rendering
- * @type {HTMLCanvasElement}
- */
 const canvas = document.getElementById("scene");
-
-/**
- * WebGL renderer with antialiasing enabled
- * @type {THREE.WebGLRenderer}
- */
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 
-/**
- * Main Three.js scene
- * @type {THREE.Scene}
- */
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87CEEB); // Sky blue background
+scene.background = new THREE.Color(0x87CEEB);
 
-/**
- * Orthographic camera for isometric-style view
- * @type {THREE.PerspectiveCamera}
- */
 const camera = new THREE.PerspectiveCamera(
     50,
     window.innerWidth / window.innerHeight,
     0.1,
-    1000
+    10000
 );
-camera.far = 10000;
 camera.position.set(-100, 0, -100);
 camera.lookAt(0, 0, 0);
 
@@ -44,59 +44,59 @@ camera.lookAt(0, 0, 0);
 // Lighting
 // ============================================================================
 
-/**
- * Main directional light simulating sunlight
- * @type {THREE.DirectionalLight}
- */
 const sunLight = new THREE.DirectionalLight(0xffffff, 1.2);
 sunLight.position.set(10, 15, 10);
 scene.add(sunLight);
 
-/**
- * Ambient light for general scene illumination
- * @type {THREE.AmbientLight}
- */
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
 scene.add(ambientLight);
 
 // ============================================================================
-// Floor Setup
+// Floor Management
 // ============================================================================
 
-const floorWidth = 12;
-const floorHeight = 0.8;
-const floorDepth = 12;
+/**
+ * Array to store all floor objects
+ * @type {PhysicsObject[]}
+ */
+const floors = [];
 
 /**
- * Static floor object (rectangular prism) tilted at 30 degrees
- * @type {PhysicsObject}
+ * Creates a flat floor at the specified position
+ * @param {number} x - X coordinate
+ * @param {number} y - Y coordinate
+ * @param {number} z - Z coordinate
+ * @returns {PhysicsObject} The created floor object
  */
-const floor = new PhysicsObject(
-    new THREE.BoxGeometry(floorWidth, floorHeight, floorDepth),
-    new THREE.MeshStandardMaterial({ 
-        color: new THREE.Color(0xFFFFFF),
-        roughness: 0.8 
-    }),
-    0, // Mass = 0 makes it static
-    new THREE.Vector3(0, 0, 0),
-    new THREE.Vector3(0, 0, 0)
-);
+function createFloor(x, y, z) {
+    const floor = new PhysicsObject(
+        new THREE.BoxGeometry(CONFIG.floorWidth, CONFIG.floorHeight, CONFIG.floorDepth),
+        new THREE.MeshStandardMaterial({ 
+            color: 0xFFFFFF,
+            roughness: 0.8 
+        }),
+        0, // Static object
+        new THREE.Vector3(x, y - 2, z),
+        new THREE.Vector3(0, 0, 0)
+    );
 
-// Set box collider dimensions
-floor.width = floorWidth;
-floor.height = floorHeight;
-floor.depth = floorDepth;
+    // Set collider dimensions
+    floor.width = CONFIG.floorWidth;
+    floor.height = CONFIG.floorHeight;
+    floor.depth = CONFIG.floorDepth;
 
-// Tilt floor 30 degrees
-floor.rotateX(-Math.PI / 6);
+    // Set material properties
+    floor.friction = CONFIG.floorFriction;
+    floor.restitution = CONFIG.floorRestitution;
 
-// Set material properties
-floor.friction = 1;      // High friction for realistic rolling
-floor.restitution = 0.5; // Moderate bounciness
+    scene.add(floor.mesh);
+    floors.push(floor);
+    
+    return floor;
+}
 
-scene.add(floor.mesh);
-
-let cameraDisplace = [0,0,0];
+// Create initial floor
+createFloor(0, 0, 0);
 
 // ============================================================================
 // Sphere Setup
@@ -107,74 +107,97 @@ let cameraDisplace = [0,0,0];
  * @type {PhysicsObject[]}
  */
 const spheres = [];
-const numSpheres = 4;
-
-/**
- * Calculates the axis for backspin on a tilted surface.
- * Backspin is perpendicular to the downhill direction.
- * @param {THREE.Vector3} floorNormal - Normal vector of the tilted floor
- * @returns {THREE.Vector3} Normalized axis for backspin rotation
- */
-function getBackspinAxis(floorNormal) {
-    // Calculate downhill direction (gravity projected onto the plane)
-    const gravity = new THREE.Vector3(0, -1, 0);
-    const downhill = gravity.clone().addScaledVector(
-        floorNormal, 
-        -gravity.dot(floorNormal)
-    );
-    downhill.normalize();
-    
-    // Backspin axis is perpendicular to both downhill and normal
-    const backspinAxis = new THREE.Vector3().crossVectors(downhill, floorNormal);
-    backspinAxis.normalize();
-    
-    return backspinAxis;
-}
 
 // Create spheres
-for (let i = 0; i < numSpheres; i++) {
+for (let i = 0; i < CONFIG.numSpheres; i++) {
     const sphere = new PhysicsObject(
         new THREE.SphereGeometry(1, 32, 32),
         createRotatingMaterial(),
-        1, // Mass = 1
-        new THREE.Vector3((i - 1) * 2.5, 50, 0), // Starting positions
-        new THREE.Vector3(0, 0, 0) // Initial velocity
+        1,
+        new THREE.Vector3((i - 1) * 2.5, CONFIG.sphereStartY, 0),
+        new THREE.Vector3(0, 0, 0)
     );
     
-    sphere.friction = 1; // High friction for realistic rolling
+    sphere.friction = 1;
     
     scene.add(sphere.mesh);
     spheres.push(sphere);
 }
 
 // Apply initial spin to first sphere
-spheres[0].angularVelocity.set(-6, 0, 0);
+spheres[0].angularVelocity.set(0, 0, 0); 
+
+// ============================================================================
+// Input Handling
+// ============================================================================
+
+const keysHeld = {};
+const cameraDisplace = [0, 0, 0];
+
+/**
+ * Processes continuous input from held keys
+ * @param {number} dt - Delta time in seconds
+ */
+function handleInput(dt) {
+    const sphere = spheres[0];
+    const force = CONFIG.forceMagnitude * dt;
+
+    // Sphere movement
+    if (keysHeld['w']) sphere.applyForce(new THREE.Vector3(0, 0, -force));
+    if (keysHeld['s']) sphere.applyForce(new THREE.Vector3(0, 0, force));
+    if (keysHeld['a']) sphere.applyForce(new THREE.Vector3(-force, 0, 0));
+    if (keysHeld['d']) sphere.applyForce(new THREE.Vector3(force, 0, 0));
+ 
+    // Camera displacement
+    const camShift = CONFIG.cameraShiftSpeed * dt;
+    if (keysHeld['ArrowUp'])    cameraDisplace[1] += camShift;
+    if (keysHeld['ArrowDown'])  cameraDisplace[1] -= camShift;
+    if (keysHeld['ArrowLeft'])  cameraDisplace[0] -= camShift;
+    if (keysHeld['ArrowRight']) cameraDisplace[0] += camShift;
+}
+
+window.addEventListener("keydown", (e) => keysHeld[e.key] = true);
+window.addEventListener("keyup", (e) => keysHeld[e.key] = false);
 
 // ============================================================================
 // Animation Loop
 // ============================================================================
 
 let lastTime = performance.now();
+let lastFloorSpawn = performance.now();
 
 /**
- * Main animation loop. Updates physics and renders the scene.
- * Runs at monitor refresh rate (typically 60 FPS).
+ * Main animation loop - updates physics and renders the scene
  */
 function animate() {
     const currentTime = performance.now();
-    const dt = (currentTime - lastTime) / 1000; // Delta time in seconds
+    const dt = (currentTime - lastTime) / 1000;
     lastTime = currentTime;
+
+    // Handle input
+    handleInput(dt);
+
+    // Spawn floor under ball every second
+    if (currentTime - lastFloorSpawn >= CONFIG.floorSpawnInterval) {
+        const pos = spheres[0].position;
+        let floor2 = createFloor(pos.x, pos.y, pos.z); 
+        floor2.rotateZ( ( Math.random() - 0.5) * Math.PI / 4);   
+        lastFloorSpawn = currentTime;
+    }
+
+    // Update spheres
     
-    // Update all spheres
-    for (let sphere of spheres) {
-        // Apply gravity force
-        sphere.applyForce(new THREE.Vector3(0, -9.81 * sphere.mass, 0));
+    for (const sphere of spheres) {
+        // Apply gravity
+        sphere.applyForce(new THREE.Vector3(0, CONFIG.gravity * sphere.mass, 0));
         
-        // Update physics simulation
+        // Update physics
         sphere.update(dt);
         
-        // Check and resolve collision with floor
-        floor.bounceBox(sphere, dt);
+        // Check collision with all floors
+        for (const floor of floors) {
+            floor.bounceBox(sphere, dt);
+        }
     }
     
     // Handle sphere-to-sphere collisions
@@ -186,24 +209,20 @@ function animate() {
         }
     }
     
-    // Optional: Camera follows first sphere
-    // Uncomment to enable dynamic camera tracking
+    // Camera follows first sphere
     const target = spheres[0].position;
     camera.lookAt(target);
     camera.position.set(
-        target.x + cameraDisplace[0],
-        target.y + cameraDisplace[1],
-        target.z + 12 + cameraDisplace[2]
+        target.x  + Math.sin(cameraDisplace[0]/20) * 50,
+        target.y + 50 + cameraDisplace[1], 
+        target.z + 0 + Math.cos(cameraDisplace[0]/20) * 50
     ); 
     
-    // Render the scene
     renderer.render(scene, camera);
-    
-    // Request next frame
     requestAnimationFrame(animate);
 }
 
-// Start animation loop
+// Start animation
 animate();
 
 // ============================================================================
@@ -211,28 +230,10 @@ animate();
 // ============================================================================
 
 /**
- * Handles window resize events to maintain proper aspect ratio and canvas size
+ * Handles window resize to maintain proper aspect ratio
  */
 window.addEventListener("resize", () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
-    
-    // Update orthographic camera frustum
-    const aspect = window.innerWidth / window.innerHeight;
-    camera.left = window.innerWidth / -40;
-    camera.right = window.innerWidth / 40;
-    camera.top = window.innerHeight / 40;
-    camera.bottom = window.innerHeight / -40;
+    camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
-});
-
-const keysHeld = {};
-
-// Track when keys are pressed
-window.addEventListener("keydown", (event) => {
-    keysHeld[event.key] = true;
-});
-
-// Track when keys are released
-window.addEventListener("keyup", (event) => {
-    keysHeld[event.key] = false;
 });
