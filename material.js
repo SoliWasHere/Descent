@@ -9,41 +9,45 @@ function createRotatingMaterial() {
 
     // Octahedron vertices (6 vertices at ±1 on each axis)
     const vertices = [
-        new THREE.Vector3(1, 0, 0),   // 0: +X
-        new THREE.Vector3(-1, 0, 0),  // 1: -X
-        new THREE.Vector3(0, 1, 0),   // 2: +Y
-        new THREE.Vector3(0, -1, 0),  // 3: -Y
-        new THREE.Vector3(0, 0, 1),   // 4: +Z
-        new THREE.Vector3(0, 0, -1)   // 5: -Z
+        new THREE.Vector3(1, 0, 0), // 0: +X
+        new THREE.Vector3(-1, 0, 0), // 1: -X
+        new THREE.Vector3(0, 1, 0), // 2: +Y
+        new THREE.Vector3(0, -1, 0), // 3: -Y
+        new THREE.Vector3(0, 0, 1), // 4: +Z
+        new THREE.Vector3(0, 0, -1) // 5: -Z
     ];
 
     // Octahedron faces (8 triangles)
     const faces = [
-        [0, 2, 4], [0, 4, 3], [0, 3, 5], [0, 5, 2],  // faces touching +X
-        [1, 4, 2], [1, 3, 4], [1, 5, 3], [1, 2, 5]   // faces touching -X
+        [0, 2, 4], [0, 4, 3], [0, 3, 5], [0, 5, 2], // faces touching +X
+        [1, 4, 2], [1, 3, 4], [1, 5, 3], [1, 2, 5] // faces touching -X
     ];
 
     // 2-coloring (alternating pattern)
     const faceColors = [0, 1, 0, 1, 1, 0, 1, 0];
 
     material.onBeforeCompile = (shader) => {
-        shader.uniforms.color1 = { value: new THREE.Color(0x0077ff) };
-        shader.uniforms.color2 = { value: new THREE.Color(0xffffff) };
+        shader.uniforms.color1 = {
+            value: new THREE.Color(0x0077ff)
+        };
+        shader.uniforms.color2 = {
+            value: new THREE.Color(0xffffff)
+        };
 
         // Pass vertices as uniforms
         for (let i = 0; i < 6; i++) {
-            shader.uniforms[`v${i}`] = { value: vertices[i] };
+            shader.uniforms[`v${i}`] = {
+                value: vertices[i]
+            };
         }
 
         shader.vertexShader = shader.vertexShader.replace(
-            '#include <common>',
-            `#include <common>
+            '#include <common>', `#include <common>
             varying vec3 vObjectPosition;`
         );
 
         shader.vertexShader = shader.vertexShader.replace(
-            '#include <begin_vertex>',
-            `#include <begin_vertex>
+            '#include <begin_vertex>', `#include <begin_vertex>
             vObjectPosition = position;`
         );
 
@@ -53,8 +57,7 @@ function createRotatingMaterial() {
         }
 
         shader.fragmentShader = shader.fragmentShader.replace(
-            '#include <common>',
-            `#include <common>
+            '#include <common>', `#include <common>
             uniform vec3 color1;
             uniform vec3 color2;
             ${uniformDecl}
@@ -79,8 +82,7 @@ function createRotatingMaterial() {
 
         // Replace AFTER lighting calculations are done
         shader.fragmentShader = shader.fragmentShader.replace(
-            '#include <opaque_fragment>',
-            `#include <opaque_fragment>
+            '#include <opaque_fragment>', `#include <opaque_fragment>
             vec3 p = normalize(vObjectPosition);
             float maxDot = -1.0;
             float checker = 0.0;
@@ -104,4 +106,6 @@ function createRotatingMaterial() {
     return material;
 }
 
-export { createRotatingMaterial };
+export {
+    createRotatingMaterial
+};

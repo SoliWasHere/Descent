@@ -4,18 +4,25 @@ export class PostProcessing {
     constructor(renderer) {
         this.renderer = renderer;
         this.renderTarget = new THREE.WebGLRenderTarget(
-            window.innerWidth, 
+            window.innerWidth,
             window.innerHeight
         );
-        
+
         this.scenePost = new THREE.Scene();
         this.cameraPost = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-        
+
         this.materialPost = new THREE.ShaderMaterial({
             uniforms: {
-                tScene: { value: this.renderTarget.texture },
-                uTime: { value: 0 },
-                uResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) }
+                tScene: {
+                    value: this.renderTarget.texture
+                },
+                uTime: {
+                    value: 0
+                },
+                uResolution: {
+                    value: new THREE.Vector2(window.innerWidth,
+                        window.innerHeight)
+                }
             },
             vertexShader: `
                 void main() {
@@ -41,9 +48,9 @@ export class PostProcessing {
                 }
             `
         });
-        
+
         const quad = new THREE.Mesh(
-            new THREE.PlaneGeometry(2, 2), 
+            new THREE.PlaneGeometry(2, 2),
             this.materialPost
         );
         this.scenePost.add(quad);
@@ -53,7 +60,7 @@ export class PostProcessing {
         // Render main scene to texture
         this.renderer.setRenderTarget(this.renderTarget);
         this.renderer.render(scene, camera);
-        
+
         // Render full-screen quad using that texture
         this.renderer.setRenderTarget(null);
         this.materialPost.uniforms.uTime.value = time * 0.001;

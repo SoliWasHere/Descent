@@ -10,7 +10,8 @@ import * as THREE from 'https://unpkg.com/three@0.181.0/build/three.module.js';
  *  - jitter/teleportation by using proper closest-point sphere-box collision
  */
 class PhysicsObject {
-    constructor(geometry, material, mass = 1, position = new THREE.Vector3(), velocity = new THREE.Vector3()) {
+    constructor(geometry, material, mass = 1, position = new THREE.Vector3(),
+        velocity = new THREE.Vector3()) {
         this.mesh = new THREE.Mesh(geometry, material);
         this.mass = mass;
         this.position = position.clone();
@@ -25,7 +26,8 @@ class PhysicsObject {
         this.angularVelocity = new THREE.Vector3(0, 0, 0);
         this.angularAcceleration = new THREE.Vector3(0, 0, 0);
         // For spheres this is fine; if geometry isn't sphere, momentOfInertia should be set externally
-        this.momentOfInertia = (this.mass > 0) ? (2 / 5) * this.mass * this.radius * this.radius : Infinity;
+        this.momentOfInertia = (this.mass > 0) ? (2 / 5) * this.mass * this
+            .radius * this.radius : Infinity;
 
         // Material properties
         this.normal = new THREE.Vector3(0, 1, 0);
@@ -48,13 +50,26 @@ class PhysicsObject {
     }
     setRotation(euler) {
         if (euler instanceof THREE.Euler) this.mesh.rotation.copy(euler);
-        else this.mesh.rotation.set(euler.x || 0, euler.y || 0, euler.z || 0);
+        else this.mesh.rotation.set(euler.x || 0, euler.y || 0, euler.z ||
+            0);
         this.updateNormal();
         return this;
     }
-    rotateX(angle) { this.mesh.rotation.x = angle; this.updateNormal(); return this; }
-    rotateY(angle) { this.mesh.rotation.y = angle; this.updateNormal(); return this; }
-    rotateZ(angle) { this.mesh.rotation.z = angle; this.updateNormal(); return this; }
+    rotateX(angle) {
+        this.mesh.rotation.x = angle;
+        this.updateNormal();
+        return this;
+    }
+    rotateY(angle) {
+        this.mesh.rotation.y = angle;
+        this.updateNormal();
+        return this;
+    }
+    rotateZ(angle) {
+        this.mesh.rotation.z = angle;
+        this.updateNormal();
+        return this;
+    }
     updateNormal() {
         this.normal.set(0, 1, 0);
         this.normal.applyEuler(this.mesh.rotation).normalize();
@@ -89,8 +104,10 @@ class PhysicsObject {
     applyTorque(torque) {
         if (this.isStatic) return;
         // torque -> angular acceleration: alpha = torque / I
-        if (this.momentOfInertia !== Infinity && this.momentOfInertia !== 0) {
-            this.angularAcceleration.addScaledVector(torque, 1 / this.momentOfInertia);
+        if (this.momentOfInertia !== Infinity && this.momentOfInertia !==
+            0) {
+            this.angularAcceleration.addScaledVector(torque, 1 / this
+                .momentOfInertia);
         }
     }
 
@@ -103,7 +120,8 @@ class PhysicsObject {
     resolveCollision(other) {
         if (this.isStatic && other.isStatic) return;
 
-        const normal = new THREE.Vector3().subVectors(this.position, other.position);
+        const normal = new THREE.Vector3().subVectors(this.position, other
+            .position);
         const dist = normal.length();
         if (dist === 0) {
             // avoid singularity: nudge along arbitrary axis (use world up rotated by one of the objects)
@@ -122,9 +140,12 @@ class PhysicsObject {
             const invMassB = other.isStatic ? 0 : 1 / other.mass;
             const invSum = invMassA + invMassB;
             if (invSum > 0) {
-                const correction = normal.clone().multiplyScalar((penetration - slop) / invSum * percent);
-                if (!this.isStatic) this.position.addScaledVector(correction, invMassA);
-                if (!other.isStatic) other.position.addScaledVector(correction, -invMassB);
+                const correction = normal.clone().multiplyScalar((
+                    penetration - slop) / invSum * percent);
+                if (!this.isStatic) this.position.addScaledVector(
+                    correction, invMassA);
+                if (!other.isStatic) other.position.addScaledVector(
+                    correction, -invMassB);
                 this.mesh.position.copy(this.position);
                 other.mesh.position.copy(other.position);
             }
@@ -133,8 +154,10 @@ class PhysicsObject {
         // relative velocity at contact
         const ra = normal.clone().multiplyScalar(-this.radius);
         const rb = normal.clone().multiplyScalar(other.radius);
-        const velA = this.velocity.clone().add(new THREE.Vector3().crossVectors(this.angularVelocity, ra));
-        const velB = other.velocity.clone().add(new THREE.Vector3().crossVectors(other.angularVelocity, rb));
+        const velA = this.velocity.clone().add(new THREE.Vector3()
+            .crossVectors(this.angularVelocity, ra));
+        const velB = other.velocity.clone().add(new THREE.Vector3()
+            .crossVectors(other.angularVelocity, rb));
         const relativeVelocity = velA.clone().sub(velB);
 
         const velAlongNormal = relativeVelocity.dot(normal);
@@ -149,9 +172,12 @@ class PhysicsObject {
         // rotational contribution to effective mass
         const raCrossN = new THREE.Vector3().crossVectors(ra, normal);
         const rbCrossN = new THREE.Vector3().crossVectors(rb, normal);
-        const invIA = (this.momentOfInertia === Infinity || this.momentOfInertia === 0) ? 0 : 1 / this.momentOfInertia;
-        const invIB = (other.momentOfInertia === Infinity || other.momentOfInertia === 0) ? 0 : 1 / other.momentOfInertia;
-        const angularTerm = (raCrossN.lengthSq() * invIA) + (rbCrossN.lengthSq() * invIB);
+        const invIA = (this.momentOfInertia === Infinity || this
+            .momentOfInertia === 0) ? 0 : 1 / this.momentOfInertia;
+        const invIB = (other.momentOfInertia === Infinity || other
+            .momentOfInertia === 0) ? 0 : 1 / other.momentOfInertia;
+        const angularTerm = (raCrossN.lengthSq() * invIA) + (rbCrossN
+            .lengthSq() * invIB);
 
         const invEffectiveMass = invMassA + invMassB + angularTerm;
         if (invEffectiveMass === 0) return;
@@ -161,36 +187,45 @@ class PhysicsObject {
 
         if (!this.isStatic) {
             this.velocity.addScaledVector(impulse, invMassA);
-            const dOmegaA = new THREE.Vector3().crossVectors(ra, impulse).multiplyScalar(invIA);
+            const dOmegaA = new THREE.Vector3().crossVectors(ra, impulse)
+                .multiplyScalar(invIA);
             this.angularVelocity.add(dOmegaA);
         }
         if (!other.isStatic) {
             other.velocity.addScaledVector(impulse, -invMassB);
-            const dOmegaB = new THREE.Vector3().crossVectors(rb, impulse.clone().negate()).multiplyScalar(invIB);
+            const dOmegaB = new THREE.Vector3().crossVectors(rb, impulse
+                .clone().negate()).multiplyScalar(invIB);
             other.angularVelocity.add(dOmegaB);
         }
 
         // friction (tangent) — Coulomb friction limited by mu * j
-        const tangent = relativeVelocity.clone().sub(normal.clone().multiplyScalar(relativeVelocity.dot(normal)));
+        const tangent = relativeVelocity.clone().sub(normal.clone()
+            .multiplyScalar(relativeVelocity.dot(normal)));
         const tLen = tangent.length();
         if (tLen > 1e-6) {
             tangent.divideScalar(tLen);
             const raCrossT = new THREE.Vector3().crossVectors(ra, tangent);
             const rbCrossT = new THREE.Vector3().crossVectors(rb, tangent);
-            const angularTermT = (raCrossT.lengthSq() * invIA) + (rbCrossT.lengthSq() * invIB);
+            const angularTermT = (raCrossT.lengthSq() * invIA) + (rbCrossT
+                .lengthSq() * invIB);
             const invEffMassT = invMassA + invMassB + angularTermT;
             const jt = -relativeVelocity.dot(tangent) / (invEffMassT || 1);
             const maxFriction = Math.min(this.friction, other.friction) * j;
-            const frictionImpulseScalar = THREE.MathUtils.clamp(jt, -Math.abs(maxFriction), Math.abs(maxFriction));
-            const frictionImpulse = tangent.clone().multiplyScalar(frictionImpulseScalar);
+            const frictionImpulseScalar = THREE.MathUtils.clamp(jt, -Math
+                .abs(maxFriction), Math.abs(maxFriction));
+            const frictionImpulse = tangent.clone().multiplyScalar(
+                frictionImpulseScalar);
 
             if (!this.isStatic) {
                 this.velocity.addScaledVector(frictionImpulse, invMassA);
-                this.angularVelocity.add(new THREE.Vector3().crossVectors(ra, frictionImpulse).multiplyScalar(invIA));
+                this.angularVelocity.add(new THREE.Vector3().crossVectors(
+                    ra, frictionImpulse).multiplyScalar(invIA));
             }
             if (!other.isStatic) {
                 other.velocity.addScaledVector(frictionImpulse, -invMassB);
-                other.angularVelocity.add(new THREE.Vector3().crossVectors(rb, frictionImpulse.clone().negate()).multiplyScalar(invIB));
+                other.angularVelocity.add(new THREE.Vector3().crossVectors(
+                        rb, frictionImpulse.clone().negate())
+                    .multiplyScalar(invIB));
             }
         }
     }
@@ -204,18 +239,41 @@ class PhysicsObject {
             new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, -1)
         ];
         const localOffsets = [
-            new THREE.Vector3(0, this.height / 2, 0), new THREE.Vector3(0, -this.height / 2, 0),
-            new THREE.Vector3(this.width / 2, 0, 0), new THREE.Vector3(-this.width / 2, 0, 0),
-            new THREE.Vector3(0, 0, this.depth / 2), new THREE.Vector3(0, 0, -this.depth / 2)
+            new THREE.Vector3(0, this.height / 2, 0), new THREE.Vector3(0, -this
+                .height / 2, 0),
+            new THREE.Vector3(this.width / 2, 0, 0), new THREE.Vector3(-this.width /
+                2, 0, 0),
+            new THREE.Vector3(0, 0, this.depth / 2), new THREE.Vector3(0, 0, -this
+                .depth / 2)
         ];
         const dimensions = [
-            { w: this.width, h: this.depth }, { w: this.width, h: this.depth },
-            { w: this.depth, h: this.height }, { w: this.depth, h: this.height },
-            { w: this.width, h: this.height }, { w: this.width, h: this.height }
+            {
+                w: this.width,
+                h: this.depth
+            }, {
+                w: this.width,
+                h: this.depth
+            },
+            {
+                w: this.depth,
+                h: this.height
+            }, {
+                w: this.depth,
+                h: this.height
+            },
+            {
+                w: this.width,
+                h: this.height
+            }, {
+                w: this.width,
+                h: this.height
+            }
         ];
         for (let i = 0; i < 6; i++) {
-            const worldNormal = localNormals[i].clone().applyEuler(this.mesh.rotation).normalize();
-            const worldOffset = localOffsets[i].clone().applyEuler(this.mesh.rotation);
+            const worldNormal = localNormals[i].clone().applyEuler(this.mesh
+                .rotation).normalize();
+            const worldOffset = localOffsets[i].clone().applyEuler(this.mesh
+                .rotation);
             const worldPosition = this.position.clone().add(worldOffset);
             faces.push({
                 normal: worldNormal,
@@ -233,19 +291,24 @@ class PhysicsObject {
         const localPos = point.clone().sub(face.position);
         const up = new THREE.Vector3(0, 1, 0);
         let right = new THREE.Vector3().crossVectors(face.normal, up);
-        if (right.length() < 0.001) right = new THREE.Vector3().crossVectors(face.normal, new THREE.Vector3(1, 0, 0));
+        if (right.length() < 0.001) right = new THREE.Vector3()
+            .crossVectors(face.normal, new THREE.Vector3(1, 0, 0));
         right.normalize();
-        const forward = new THREE.Vector3().crossVectors(right, face.normal).normalize();
+        const forward = new THREE.Vector3().crossVectors(right, face.normal)
+            .normalize();
         const x = localPos.dot(right);
         const y = localPos.dot(forward);
-        return Math.abs(x) <= face.width / 2 + 1e-6 && Math.abs(y) <= face.height / 2 + 1e-6;
+        return Math.abs(x) <= face.width / 2 + 1e-6 && Math.abs(y) <= face
+            .height / 2 + 1e-6;
     }
 
     // ------------------ Plane bounce (kept but made safer) ------------------
-    bounceOffPlane(planePosition, planeNormal, planeRestitution = 0.7, dt = 0.016) {
+    bounceOffPlane(planePosition, planeNormal, planeRestitution = 0.7, dt =
+        0.016) {
         if (this.isStatic) return;
 
-        const toSphere = new THREE.Vector3().subVectors(this.position, planePosition);
+        const toSphere = new THREE.Vector3().subVectors(this.position,
+            planePosition);
         const distanceToPlane = toSphere.dot(planeNormal);
 
         if (distanceToPlane >= this.radius) return;
@@ -266,19 +329,22 @@ class PhysicsObject {
         const m = this.mass;
 
         // rolling/slip friction handling (simplified, robust)
-        const vRoll = new THREE.Vector3().crossVectors(this.angularVelocity, planeNormal).multiplyScalar(this.radius);
+        const vRoll = new THREE.Vector3().crossVectors(this.angularVelocity,
+            planeNormal).multiplyScalar(this.radius);
         const vSlip = vTangent.clone().sub(vRoll);
         const slipSpeed = vSlip.length();
         const mu = this.friction;
 
         // normal bounce
         const newVn = -e * vn;
-        this.velocity.copy(planeNormal.clone().multiplyScalar(newVn).add(vTangent));
+        this.velocity.copy(planeNormal.clone().multiplyScalar(newVn).add(
+            vTangent));
 
         // friction impulse approximation (apply small tangential reduction)
         if (slipSpeed > 1e-4 && mu > 1e-6) {
             const slipDir = vSlip.clone().normalize();
-            const j_noslip = m * slipSpeed / (1.0 + (m * this.radius * this.radius) / this.momentOfInertia);
+            const j_noslip = m * slipSpeed / (1.0 + (m * this.radius * this
+                .radius) / this.momentOfInertia);
             const j_normal = m * Math.abs(vn) * (1 + e);
             const j_max = mu * j_normal;
             const j = Math.min(j_noslip, j_max);
@@ -286,7 +352,8 @@ class PhysicsObject {
             // angular update
             const r = planeNormal.clone().multiplyScalar(-this.radius);
             const J = slipDir.clone().multiplyScalar(-j);
-            const deltaOmega = new THREE.Vector3().crossVectors(r, J).divideScalar(this.momentOfInertia);
+            const deltaOmega = new THREE.Vector3().crossVectors(r, J)
+                .divideScalar(this.momentOfInertia);
             this.angularVelocity.add(deltaOmega);
         }
     }
@@ -306,7 +373,8 @@ class PhysicsObject {
         const invBoxQ = boxQ.clone().conjugate();
 
         // sphere position in box local space
-        const localSpherePos = sphere.position.clone().sub(this.position).applyQuaternion(invBoxQ);
+        const localSpherePos = sphere.position.clone().sub(this.position)
+            .applyQuaternion(invBoxQ);
 
         const hx = this.width / 2;
         const hy = this.height / 2;
@@ -320,14 +388,17 @@ class PhysicsObject {
         );
 
         // world space closest point
-        const closestWorld = closestLocal.clone().applyQuaternion(boxQ).add(this.position);
+        const closestWorld = closestLocal.clone().applyQuaternion(boxQ).add(
+            this.position);
 
         // vector from closest point to sphere center
         const diff = sphere.position.clone().sub(closestWorld);
         const dist = diff.length();
         const radius = sphere.radius;
 
-        if (dist >= radius || dist === 0 && (closestLocal.x === localSpherePos.x && closestLocal.y === localSpherePos.y && closestLocal.z === localSpherePos.z)) {
+        if (dist >= radius || dist === 0 && (closestLocal.x ===
+                localSpherePos.x && closestLocal.y === localSpherePos.y &&
+                closestLocal.z === localSpherePos.z)) {
             // No penetration OR exactly inside but closest point equals sphere center projection (corner case handled below).
             // If dist === 0 and closest point equals sphere center projection, we will pick a face normal instead below.
             if (dist >= radius) return;
@@ -343,9 +414,12 @@ class PhysicsObject {
             const dx = Math.abs(localSpherePos.x) - hx;
             const dy = Math.abs(localSpherePos.y) - hy;
             const dz = Math.abs(localSpherePos.z) - hz;
-            if (dx >= dy && dx >= dz) normal = new THREE.Vector3(Math.sign(localSpherePos.x), 0, 0);
-            else if (dy >= dx && dy >= dz) normal = new THREE.Vector3(0, Math.sign(localSpherePos.y), 0);
-            else normal = new THREE.Vector3(0, 0, Math.sign(localSpherePos.z));
+            if (dx >= dy && dx >= dz) normal = new THREE.Vector3(Math.sign(
+                localSpherePos.x), 0, 0);
+            else if (dy >= dx && dy >= dz) normal = new THREE.Vector3(0,
+                Math.sign(localSpherePos.y), 0);
+            else normal = new THREE.Vector3(0, 0, Math.sign(localSpherePos
+                .z));
             // rotate normal to world space
             normal.applyQuaternion(boxQ).normalize();
         }
@@ -360,10 +434,14 @@ class PhysicsObject {
         if (invSum === 0) return;
         const percent = 0.8;
         const slop = 0.001;
-        const correctionMagnitude = Math.max(penetration - slop, 0) / invSum * percent;
-        const correction = normal.clone().multiplyScalar(correctionMagnitude);
-        if (!sphere.isStatic) sphere.position.addScaledVector(correction, invMassA);
-        if (!this.isStatic) this.position.addScaledVector(correction, -invMassB);
+        const correctionMagnitude = Math.max(penetration - slop, 0) /
+            invSum * percent;
+        const correction = normal.clone().multiplyScalar(
+            correctionMagnitude);
+        if (!sphere.isStatic) sphere.position.addScaledVector(correction,
+            invMassA);
+        if (!this.isStatic) this.position.addScaledVector(correction, -
+            invMassB);
         sphere.mesh.position.copy(sphere.position);
         this.mesh.position.copy(this.position);
 
@@ -373,8 +451,11 @@ class PhysicsObject {
         const rb = contactPoint.clone().sub(this.position);
 
         // velocities at contact (include angular)
-        const velA = sphere.velocity.clone().add(new THREE.Vector3().crossVectors(sphere.angularVelocity, ra));
-        const velB = this.velocity ? this.velocity.clone().add(new THREE.Vector3().crossVectors(this.angularVelocity, rb)) : new THREE.Vector3();
+        const velA = sphere.velocity.clone().add(new THREE.Vector3()
+            .crossVectors(sphere.angularVelocity, ra));
+        const velB = this.velocity ? this.velocity.clone().add(new THREE
+                .Vector3().crossVectors(this.angularVelocity, rb)) :
+            new THREE.Vector3();
         const relativeVel = velA.clone().sub(velB);
 
         const velAlongNormal = relativeVel.dot(normal);
@@ -383,11 +464,14 @@ class PhysicsObject {
         const e = Math.min(sphere.restitution, this.restitution);
 
         // compute effective mass including rotational term
-        const invIA = (sphere.momentOfInertia === Infinity || sphere.momentOfInertia === 0) ? 0 : 1 / sphere.momentOfInertia;
-        const invIB = (this.momentOfInertia === Infinity || this.momentOfInertia === 0) ? 0 : 1 / this.momentOfInertia;
+        const invIA = (sphere.momentOfInertia === Infinity || sphere
+            .momentOfInertia === 0) ? 0 : 1 / sphere.momentOfInertia;
+        const invIB = (this.momentOfInertia === Infinity || this
+            .momentOfInertia === 0) ? 0 : 1 / this.momentOfInertia;
         const raCrossN = new THREE.Vector3().crossVectors(ra, normal);
         const rbCrossN = new THREE.Vector3().crossVectors(rb, normal);
-        const angularTerm = raCrossN.lengthSq() * invIA + rbCrossN.lengthSq() * invIB;
+        const angularTerm = raCrossN.lengthSq() * invIA + rbCrossN
+        .lengthSq() * invIB;
         const invEffectiveMass = invMassA + invMassB + angularTerm;
         if (invEffectiveMass === 0) return;
 
@@ -399,35 +483,44 @@ class PhysicsObject {
 
         if (!sphere.isStatic) {
             sphere.velocity.addScaledVector(impulse, invMassA);
-            sphere.angularVelocity.add(new THREE.Vector3().crossVectors(ra, impulse).multiplyScalar(invIA));
+            sphere.angularVelocity.add(new THREE.Vector3().crossVectors(ra,
+                impulse).multiplyScalar(invIA));
         }
         if (!this.isStatic) {
             this.velocity.addScaledVector(impulse, -invMassB);
-            this.angularVelocity.add(new THREE.Vector3().crossVectors(rb, impulse.clone().negate()).multiplyScalar(invIB));
+            this.angularVelocity.add(new THREE.Vector3().crossVectors(rb,
+                impulse.clone().negate()).multiplyScalar(invIB));
         }
 
         // tangential (friction) impulse
-        const tangent = relativeVel.clone().sub(normal.clone().multiplyScalar(relativeVel.dot(normal)));
+        const tangent = relativeVel.clone().sub(normal.clone()
+            .multiplyScalar(relativeVel.dot(normal)));
         const tLen = tangent.length();
         if (tLen > 1e-6) {
             tangent.divideScalar(tLen);
             const raCrossT = new THREE.Vector3().crossVectors(ra, tangent);
             const rbCrossT = new THREE.Vector3().crossVectors(rb, tangent);
-            const angularTermT = raCrossT.lengthSq() * invIA + rbCrossT.lengthSq() * invIB;
+            const angularTermT = raCrossT.lengthSq() * invIA + rbCrossT
+                .lengthSq() * invIB;
             const invEffMassT = invMassA + invMassB + angularTermT || 1;
             const jt = -relativeVel.dot(tangent) / invEffMassT;
             const mu = Math.min(sphere.friction, this.friction);
             const maxFriction = Math.abs(j) * mu;
-            const frictionScalar = THREE.MathUtils.clamp(jt, -maxFriction, maxFriction);
-            const frictionImpulse = tangent.clone().multiplyScalar(frictionScalar);
+            const frictionScalar = THREE.MathUtils.clamp(jt, -maxFriction,
+                maxFriction);
+            const frictionImpulse = tangent.clone().multiplyScalar(
+                frictionScalar);
 
             if (!sphere.isStatic) {
                 sphere.velocity.addScaledVector(frictionImpulse, invMassA);
-                sphere.angularVelocity.add(new THREE.Vector3().crossVectors(ra, frictionImpulse).multiplyScalar(invIA));
+                sphere.angularVelocity.add(new THREE.Vector3().crossVectors(
+                    ra, frictionImpulse).multiplyScalar(invIA));
             }
             if (!this.isStatic) {
                 this.velocity.addScaledVector(frictionImpulse, -invMassB);
-                this.angularVelocity.add(new THREE.Vector3().crossVectors(rb, frictionImpulse.clone().negate()).multiplyScalar(invIB));
+                this.angularVelocity.add(new THREE.Vector3().crossVectors(
+                        rb, frictionImpulse.clone().negate())
+                    .multiplyScalar(invIB));
             }
         }
     }
@@ -443,17 +536,24 @@ class PhysicsObject {
 class CollisionHelper {
     static isOnBox(spherePos, boxObject, sphereRadius = 1) {
         const invQ = boxObject.mesh.quaternion.clone().conjugate();
-        const local = spherePos.clone().sub(boxObject.position).applyQuaternion(invQ);
-        const hx = boxObject.width / 2, hy = boxObject.height / 2, hz = boxObject.depth / 2;
+        const local = spherePos.clone().sub(boxObject.position)
+            .applyQuaternion(invQ);
+        const hx = boxObject.width / 2,
+            hy = boxObject.height / 2,
+            hz = boxObject.depth / 2;
         const clamped = new THREE.Vector3(
             THREE.MathUtils.clamp(local.x, -hx, hx),
             THREE.MathUtils.clamp(local.y, -hy, hy),
             THREE.MathUtils.clamp(local.z, -hz, hz)
         );
-        const closestWorld = clamped.applyQuaternion(boxObject.mesh.quaternion).add(boxObject.position);
+        const closestWorld = clamped.applyQuaternion(boxObject.mesh
+            .quaternion).add(boxObject.position);
         const dist = closestWorld.distanceTo(spherePos);
         return dist <= sphereRadius + 1e-6;
     }
 }
 
-export { PhysicsObject, CollisionHelper };
+export {
+    PhysicsObject,
+    CollisionHelper
+};

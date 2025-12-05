@@ -1,4 +1,6 @@
-import { PhysicsObject } from "./physics.js";
+import {
+    PhysicsObject
+} from "./physics.js";
 
 // globals.js
 export const GLOBALS = {

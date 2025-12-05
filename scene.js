@@ -1,16 +1,21 @@
 import * as THREE from 'https://unpkg.com/three@0.181.0/build/three.module.js';
-import { CONFIG } from './config.js';
+import {
+    CONFIG
+} from './config.js';
 
 export function createScene(canvas) {
     // Renderer
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    const renderer = new THREE.WebGLRenderer({
+        canvas,
+        antialias: true
+    });
     renderer.setSize(window.innerWidth, window.innerHeight);
 
-   if (CONFIG.isLighted) {
+    if (CONFIG.isLighted) {
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.BasicShadowMap;
         //renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Softer shadows
-    } 
+    }
     // Scene
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x1d1e2c);
@@ -25,7 +30,11 @@ export function createScene(canvas) {
     camera.position.set(-100, 0, -100);
     camera.lookAt(0, 0, 0);
 
-    return { renderer, scene, camera };
+    return {
+        renderer,
+        scene,
+        camera
+    };
 }
 
 export function setupLighting(scene) {
@@ -38,7 +47,7 @@ export function setupLighting(scene) {
         const sunLight = new THREE.DirectionalLight(0xffffff, 4);
         sunLight.position.set(50, 100, 50); // Position light at an angle
         sunLight.castShadow = true; // Enable shadows!
-        
+
         // Configure shadow camera to cover a larger area
         const shadowSize = CONFIG.shadowSize; // Adjust based on your scene size
         sunLight.shadow.camera.left = -shadowSize;
@@ -47,12 +56,12 @@ export function setupLighting(scene) {
         sunLight.shadow.camera.bottom = -shadowSize;
         sunLight.shadow.camera.near = 0.5;
         sunLight.shadow.camera.far = 500;
-        
+
         // Higher resolution shadows
         sunLight.shadow.mapSize.width = 2048;
         sunLight.shadow.mapSize.height = 2048;
         sunLight.shadow.bias = -0.0001; // Reduce shadow acne
-        
+
         scene.add(sunLight);
         return sunLight;
     }
@@ -67,7 +76,11 @@ export function setupResizeHandler(renderer, camera) {
     });
 }
 
-export function updateShadowPosition(light, caster, height = 15, shadowSize = 20, angle = { x: 1, z: 1 }) {
+export function updateShadowPosition(light, caster, height = 15, shadowSize =
+    20, angle = {
+        x: 1,
+        z: 1
+    }) {
     // Normalize the angle vector
     const length = Math.sqrt(angle.x * angle.x + angle.z * angle.z);
     const nx = angle.x / length;
@@ -81,7 +94,8 @@ export function updateShadowPosition(light, caster, height = 15, shadowSize = 20
     );
 
     // Aim the light at the object
-    light.target.position.set(caster.position.x, caster.position.y, caster.position.z);
+    light.target.position.set(caster.position.x, caster.position.y, caster
+        .position.z);
     light.target.updateMatrixWorld();
 
     // Use shadowSize from CONFIG if available
@@ -96,10 +110,8 @@ export function updateShadowPosition(light, caster, height = 15, shadowSize = 20
     light.shadow.camera.far = 50;
 
     // High resolution
-    light.shadow.mapSize.width = Math.pow(2, 9)+1;
-    light.shadow.mapSize.height = Math.pow(2, 9)+1;
+    light.shadow.mapSize.width = Math.pow(2, 9) + 1;
+    light.shadow.mapSize.height = Math.pow(2, 9) + 1;
 
     light.shadow.camera.updateProjectionMatrix();
 }
-
-

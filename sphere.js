@@ -1,8 +1,16 @@
 import * as THREE from 'https://unpkg.com/three@0.181.0/build/three.module.js';
-import { PhysicsObject } from './physics.js';
-import { createRotatingMaterial } from './material.js';
-import { CONFIG } from './config.js';
-import { GLOBALS } from './globals.js';
+import {
+    PhysicsObject
+} from './physics.js';
+import {
+    createRotatingMaterial
+} from './material.js';
+import {
+    CONFIG
+} from './config.js';
+import {
+    GLOBALS
+} from './globals.js';
 
 export class SphereManager {
     constructor(scene) {
@@ -18,13 +26,13 @@ export class SphereManager {
             new THREE.Vector3(0, 1, 0),
             new THREE.Vector3(0, 0, 0)
         );
-            
+
         sphere.friction = 1;
         sphere.angularVelocity.set(0, 0, 0);
 
-        sphere.mesh.castShadow = true; 
+        sphere.mesh.castShadow = true;
         sphere.mesh.receiveShadow = true;
-            
+
         this.scene.add(sphere.mesh);
         this.spheres.push(sphere);
         GLOBALS.player.PhysicsObject = sphere;
@@ -32,7 +40,8 @@ export class SphereManager {
 
     applyGravity() {
         for (const sphere of this.spheres) {
-            sphere.applyForce(new THREE.Vector3(0, CONFIG.gravity * sphere.mass, 0));
+            sphere.applyForce(new THREE.Vector3(0, CONFIG.gravity * sphere
+                .mass, 0));
         }
     }
 
