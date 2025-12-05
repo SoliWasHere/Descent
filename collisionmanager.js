@@ -1,304 +1,181 @@
-// collisionmanager.js - Global triangle collision manager
 import * as THREE from 'https://unpkg.com/three@0.181.0/build/three.module.js';
 
-export class CollisionManager {
-    constructor() {
-        this.triangles = [];
-        console.log('CollisionManager initialized');
-    }
+class BVHNode {
+    constructor(triangles) {
+        this.triangles = triangles;
+        this.left = null;
+        this.right = null;
+        this.aabb = new THREE.Box3();
 
-    addTriangles(triangles) {
-        // Triangles should already be in world space from createSineWavePlatform
-        // But be defensive: ensure each triangle has a normalized normal and bounds
-        const prepared = triangles.map(tri => {
-            const v0 = tri.v0.clone();
-            const v1 = tri.v1.clone();
-            const v2 = tri.v2.clone();
-
-            let normal = tri.normal ? tri.normal.clone() : new THREE
-                .Vector3();
-            if (!tri.normal) {
-                normal.copy(new THREE.Vector3().subVectors(v1, v0)
-                    .cross(new THREE.Vector3().subVectors(v2,
-                        v0)));
-            }
-            if (normal.lengthSq() > 1e-12) normal.normalize();
-
-            const bounds = tri.bounds || {
-                minX: Math.min(v0.x, v1.x, v2.x),
-                maxX: Math.max(v0.x, v1.x, v2.x),
-                minY: Math.min(v0.y, v1.y, v2.y),
-                maxY: Math.max(v0.y, v1.y, v2.y),
-                minZ: Math.min(v0.z, v1.z, v2.z),
-                maxZ: Math.max(v0.z, v1.z, v2.z)
-            };
-
-            return {
-                v0,
-                v1,
-                v2,
-                normal,
-                bounds
-            };
+        triangles.forEach(tri => {
+            this.aabb.expandByPoint(tri.v0);
+            this.aabb.expandByPoint(tri.v1);
+            this.aabb.expandByPoint(tri.v2);
         });
 
-        this.triangles.push(...prepared);
-        console.log(
-            `Added ${prepared.length} triangles. Total: ${this.triangles.length}`
-        );
-    }
+        if (triangles.length > 10) {
+            // Split along longest axis
+            const size = new THREE.Vector3();
+            this.aabb.getSize(size);
+            const axis = ['x', 'y', 'z'][size.toArray().indexOf(Math.max(
+                size.x, size.y, size.z))];
 
-    getNearbyTriangles(position, radius, margin = 2) {
-        const searchRadius = radius + margin + 5; // More generous margin
-        return this.triangles.filter(tri => {
-            if (tri.bounds) {
-                if (position.x + searchRadius < tri.bounds.minX ||
-                    position.x - searchRadius > tri.bounds.maxX)
-                    return false;
-                if (position.y + searchRadius < tri.bounds.minY ||
-                    position.y - searchRadius > tri.bounds.maxY)
-                    return false;
-                if (position.z + searchRadius < tri.bounds.minZ ||
-                    position.z - searchRadius > tri.bounds.maxZ)
-                    return false;
-            }
-            return true; // Include if passes AABB
-        });
-    }
-    collideSphere(sphere, friction = 0.5, restitution = 0.7, dt = 0.016) {
-        if (sphere.isStatic) return false;
-
-        let nearby = this.getNearbyTriangles(sphere.position, sphere.radius,
-            5);
-
-        // Debug: if AABB filtering returns nothing, log and fall back to full scan once
-        if (nearby.length === 0) {
-            if (Math.random() < 0.5) {
-                console.log(
-                    `No nearby triangles (AABB) for sphere at (${sphere.position.x.toFixed(1)}, ${sphere.position.y.toFixed(1)}, ${sphere.position.z.toFixed(1)}). Falling back to full-triangle scan.`
-                );
-            }
-            // Fallback: use all triangles so we can tell whether the AABB filtering is too strict
-            nearby = this.triangles.slice();
-        }
-
-        let deepestPenetration = -Infinity;
-        let bestContact = null;
-        let debugInfo = [];
-
-        for (const triangle of nearby) {
-            const closest = this.closestPointOnTriangle(
-                sphere.position, triangle.v0, triangle.v1, triangle.v2
-            );
-
-            const toSphere = new THREE.Vector3().subVectors(sphere.position,
-                closest);
-            const distance = toSphere.length();
-            const penetration = sphere.radius - distance;
-
-            // Log every triangle check
-            debugInfo.push({
-                penetration: penetration.toFixed(3),
-                distance: distance.toFixed(3),
-                normalY: triangle.normal.y.toFixed(3),
-                closestY: closest.y.toFixed(3)
+            triangles.sort((a, b) => {
+                const centerA = a.v0.clone().add(a.v1).add(a.v2)
+                    .divideScalar(3)[axis];
+                const centerB = b.v0.clone().add(b.v1).add(b.v2)
+                    .divideScalar(3)[axis];
+                return centerA - centerB;
             });
 
-            if (penetration > 0) {
-                if (penetration > deepestPenetration) {
-                    deepestPenetration = penetration;
-
-                    // Use the face normal, not the vector to sphere center
-                    const sphereToTriangle = new THREE.Vector3().subVectors(
-                        triangle.v0, sphere.position);
-                    let normal = triangle.normal.clone();
-
-                    // If the face normal points toward the sphere, flip it
-                    if (normal.dot(sphereToTriangle) > 0) {
-                        normal.negate();
-                    }
-
-                    bestContact = {
-                        point: closest,
-                        normal: normal,
-                        penetration: penetration,
-                        triangle: triangle
-                    };
-                }
-            }
+            const mid = Math.floor(triangles.length / 2);
+            this.left = new BVHNode(triangles.slice(0, mid));
+            this.right = new BVHNode(triangles.slice(mid));
+            this.triangles = null;
         }
-
-        // Log collision attempts
-        if (nearby.length > 0 && Math.random() < 0.1) {
-            console.log(
-                `Sphere at Y=${sphere.position.y.toFixed(2)}, checked ${nearby.length} triangles, penetrations:`,
-                debugInfo.filter(d => parseFloat(d.penetration) > 0));
-            if (bestContact) {
-                console.log(
-                    `  COLLISION! Normal: (${bestContact.normal.x.toFixed(2)}, ${bestContact.normal.y.toFixed(2)}, ${bestContact.normal.z.toFixed(2)}), pen: ${bestContact.penetration.toFixed(3)}`
-                );
-            }
-        }
-        if (bestContact) {
-            console.log(
-                `COLLISION! Normal: (${bestContact.normal.x.toFixed(2)}, ${bestContact.normal.y.toFixed(2)}, ${bestContact.normal.z.toFixed(2)})`
-            );
-            console.log(
-                `  Triangle vertices: v0.y=${bestContact.triangle.v0.y.toFixed(2)}, v1.y=${bestContact.triangle.v1.y.toFixed(2)}, v2.y=${bestContact.triangle.v2.y.toFixed(2)}`
-            );
-            sphere.position.addScaledVector(bestContact.normal, bestContact
-                .penetration);
-            sphere.mesh.position.copy(sphere.position);
-
-            const ra = bestContact.point.clone().sub(sphere.position);
-            const velAtContact = sphere.velocity.clone().add(
-                new THREE.Vector3().crossVectors(sphere.angularVelocity,
-                    ra)
-            );
-
-            const velAlongNormal = velAtContact.dot(bestContact.normal);
-
-            if (velAlongNormal < 0) {
-                const invMass = 1 / sphere.mass;
-                const invInertia = (sphere.momentOfInertia > 0 && sphere
-                        .momentOfInertia !== Infinity) ?
-                    1 / sphere.momentOfInertia :
-                    0;
-
-                const raCrossN = new THREE.Vector3().crossVectors(ra,
-                    bestContact.normal);
-                const angularTerm = raCrossN.lengthSq() * invInertia;
-                const invEffectiveMass = invMass + angularTerm;
-
-                const j = -(1 + restitution) * velAlongNormal /
-                    invEffectiveMass;
-                const impulse = bestContact.normal.clone().multiplyScalar(
-                    j);
-
-                sphere.velocity.addScaledVector(impulse, invMass);
-                sphere.angularVelocity.add(raCrossN.multiplyScalar(j *
-                    invInertia));
-
-                const tangent = velAtContact.clone().sub(
-                    bestContact.normal.clone().multiplyScalar(
-                        velAlongNormal)
-                );
-                const tangentLen = tangent.length();
-
-                if (tangentLen > 1e-6) {
-                    tangent.normalize();
-                    const raCrossT = new THREE.Vector3().crossVectors(ra,
-                        tangent);
-                    const angularTermT = raCrossT.lengthSq() * invInertia;
-                    const invEffMassT = invMass + angularTermT;
-
-                    const jt = -velAtContact.dot(tangent) / invEffMassT;
-                    const frictionScalar = THREE.MathUtils.clamp(
-                        jt, -Math.abs(j) * friction, Math.abs(j) *
-                        friction
-                    );
-
-                    const frictionImpulse = tangent.clone().multiplyScalar(
-                        frictionScalar);
-                    sphere.velocity.addScaledVector(frictionImpulse,
-                        invMass);
-                    sphere.angularVelocity.add(raCrossT.multiplyScalar(
-                        frictionScalar * invInertia));
-                }
-            }
-
-            return true;
-        }
-
-        return false;
     }
-    closestPointOnTriangle(point, v0, v1, v2) {
-        // Compute edges
-        const edge0 = new THREE.Vector3().subVectors(v1, v0);
-        const edge1 = new THREE.Vector3().subVectors(v2, v0);
-        const v0ToPoint = new THREE.Vector3().subVectors(v0, point);
 
-        const a = edge0.dot(edge0);
-        const b = edge0.dot(edge1);
-        const c = edge1.dot(edge1);
-        const d = edge0.dot(v0ToPoint);
-        const e = edge1.dot(v0ToPoint);
+    querySphere(position, radius, results = []) {
+        const sphere = new THREE.Sphere(position, radius);
+        if (!sphere.intersectsBox(this.aabb)) return results;
 
-        const det = a * c - b * b;
-        let s = b * e - c * d;
-        let t = b * d - a * e;
+        if (this.triangles) {
+            results.push(...this.triangles);
+        } else {
+            this.left.querySphere(position, radius, results);
+            this.right.querySphere(position, radius, results);
+        }
+        return results;
+    }
+}
 
-        // Check which region the projection falls into
-        if (s + t <= det) {
-            if (s < 0) {
-                if (t < 0) {
-                    // Region 4 - closest to v0
-                    if (d < 0) {
-                        t = 0;
-                        s = (-d >= a) ? 1 : -d / a;
-                    } else {
-                        s = 0;
-                        t = (e >= 0) ? 0 : ((-e >= c) ? 1 : -e / c);
-                    }
-                } else {
-                    // Region 3 - closest to edge v0-v2
-                    s = 0;
-                    t = (e >= 0) ? 0 : ((-e >= c) ? 1 : -e / c);
-                }
-            } else if (t < 0) {
-                // Region 5 - closest to edge v0-v1
-                t = 0;
-                s = (d >= 0) ? 0 : ((-d >= a) ? 1 : -d / a);
-            } else {
-                // Region 0 - inside triangle
-                const invDet = 1 / det;
-                s *= invDet;
-                t *= invDet;
+export class MeshCollider {
+    constructor(mesh) {
+        this.mesh = mesh;
+        this.originalTriangles = this.extractTriangles(mesh.geometry);
+        this.bvh = new BVHNode(this.originalTriangles);
+    }
+
+    extractTriangles(geometry) {
+        const pos = geometry.attributes.position;
+        const index = geometry.index;
+        const tris = [];
+
+        if (!pos) return tris;
+
+        const getVertex = i => new THREE.Vector3().fromBufferAttribute(pos,
+            i);
+
+        if (!index) {
+            for (let i = 0; i < pos.count; i += 3) {
+                const v0 = getVertex(i),
+                    v1 = getVertex(i + 1),
+                    v2 = getVertex(i + 2);
+                const normal = new THREE.Vector3().subVectors(v1, v0).cross(
+                    new THREE.Vector3().subVectors(v2, v0)).normalize();
+                tris.push({
+                    v0,
+                    v1,
+                    v2,
+                    normal
+                });
             }
         } else {
-            if (s < 0) {
-                // Region 2 - closest to edge v1-v2
-                const tmp0 = b + d;
-                const tmp1 = c + e;
-                if (tmp1 > tmp0) {
-                    const numer = tmp1 - tmp0;
-                    const denom = a - 2 * b + c;
-                    s = (numer >= denom) ? 1 : numer / denom;
-                    t = 1 - s;
-                } else {
-                    s = 0;
-                    t = (tmp1 <= 0) ? 1 : ((e >= 0) ? 0 : -e / c);
-                }
-            } else if (t < 0) {
-                // Region 6 - closest to edge v0-v1
-                const tmp0 = b + e;
-                const tmp1 = a + d;
-                if (tmp1 > tmp0) {
-                    const numer = tmp1 - tmp0;
-                    const denom = a - 2 * b + c;
-                    t = (numer >= denom) ? 1 : numer / denom;
-                    s = 1 - t;
-                } else {
-                    t = 0;
-                    s = (tmp1 <= 0) ? 1 : ((d >= 0) ? 0 : -d / a);
-                }
-            } else {
-                // Region 1 - closest to edge v1-v2
-                const numer = c + e - b - d;
-                if (numer <= 0) {
-                    s = 0;
-                } else {
-                    const denom = a - 2 * b + c;
-                    s = (numer >= denom) ? 1 : numer / denom;
-                }
-                t = 1 - s;
+            for (let i = 0; i < index.count; i += 3) {
+                const v0 = getVertex(index.getX(i)),
+                    v1 = getVertex(index.getX(i + 1)),
+                    v2 = getVertex(index.getX(i + 2));
+                const normal = new THREE.Vector3().subVectors(v1, v0).cross(
+                    new THREE.Vector3().subVectors(v2, v0)).normalize();
+                tris.push({
+                    v0,
+                    v1,
+                    v2,
+                    normal
+                });
+            }
+        }
+        return tris;
+    }
+
+    getWorldTriangles() {
+        const m = this.mesh.matrixWorld;
+        return this.originalTriangles.map(tri => ({
+            v0: tri.v0.clone().applyMatrix4(m),
+            v1: tri.v1.clone().applyMatrix4(m),
+            v2: tri.v2.clone().applyMatrix4(m),
+            normal: tri.normal.clone().transformDirection(m)
+                .normalize()
+        }));
+    }
+
+    // -------------------
+    // CCD collision sweep
+    // -------------------
+    sweepSphere(prevPos, nextPos, radius) {
+        const direction = new THREE.Vector3().subVectors(nextPos, prevPos);
+        const distance = direction.length();
+        if (distance === 0) return null;
+        direction.normalize();
+
+        const candidates = this.bvh.querySphere(prevPos.clone().add(nextPos)
+            .multiplyScalar(0.5), distance / 2 + radius);
+        let hit = null;
+        let minT = Infinity;
+
+        for (let tri of candidates) {
+            const result = this.sphereTriangleSweep(prevPos, direction,
+                distance, radius, tri);
+            if (result && result.t < minT) {
+                minT = result.t;
+                hit = result;
             }
         }
 
-        // Construct the closest point: v0 + s * edge0 + t * edge1
-        return new THREE.Vector3()
-            .copy(v0)
-            .addScaledVector(edge0, s)
-            .addScaledVector(edge1, t);
+        return hit;
+    }
+
+    sphereTriangleSweep(pos, dir, distance, radius, tri) {
+        // Approximation: treat triangle as plane first
+        const {
+            v0,
+            normal
+        } = tri;
+        const denom = normal.dot(dir);
+        if (Math.abs(denom) < 1e-6) return null; // parallel
+
+        const t = (radius - normal.dot(pos.clone().sub(v0))) / denom;
+        if (t < 0 || t > distance) return null;
+
+        const point = pos.clone().add(dir.clone().multiplyScalar(t));
+        if (this.pointInTriangle(point.clone().sub(normal.clone()
+                .multiplyScalar(radius)), tri.v0, tri.v1, tri.v2)) {
+            return {
+                t,
+                normal: denom < 0 ? normal.clone() : normal.clone()
+                .negate(),
+                contactPoint: point
+            };
+        }
+        return null;
+    }
+
+    // -------------------
+    // Helpers
+    // -------------------
+    pointInTriangle(p, a, b, c) {
+        const v0 = c.clone().sub(a),
+            v1 = b.clone().sub(a),
+            v2 = p.clone().sub(a);
+        const dot00 = v0.dot(v0),
+            dot01 = v0.dot(v1),
+            dot02 = v0.dot(v2);
+        const dot11 = v1.dot(v1),
+            dot12 = v1.dot(v2);
+        const denom = dot00 * dot11 - dot01 * dot01;
+        if (denom === 0) return false;
+        const u = (dot11 * dot02 - dot01 * dot12) / denom;
+        const v = (dot00 * dot12 - dot01 * dot02) / denom;
+        return u >= 0 && v >= 0 && u + v <= 1;
     }
 }
