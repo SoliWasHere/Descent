@@ -21,7 +21,8 @@ createSineWavePlatform(x, y, z) {
     const result = createSineWaveMesh({
         position: new THREE.Vector3(x, y, z),
         travelAxis: 'x',
-        waveAxis: 'z'
+        waveAxis: 'z',
+        heightAxis: 'x'
     });
 
     GLOBALS.scene.add(result.mesh);
@@ -66,7 +67,8 @@ createZigZagPlatform(x, y, z) {
     const result = createZigZagMesh({
         position: new THREE.Vector3(x, y, z),
         travelAxis: 'x',
-        zigzagAxis: 'x'
+        zigzagAxis: 'z',
+        heightAxis: 'y'
     });
 
     GLOBALS.scene.add(result.mesh);

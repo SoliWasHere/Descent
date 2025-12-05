@@ -167,92 +167,109 @@ export function createSineWavePlatform(
     return { geometry, triangles };
 }
 
-export function createZigzagPlatform({
-    length = 10,       // travel direction (X)
-    width = 5,         // side-to-side (Z extent)
-    height = 1,        // thickness (Y)
-    zigzagAmount = 2,  // amplitude of Z-wave
-    frequency = 0.25,  // wave frequency
-    segments = 100     // resolution
-} = {}) {
+export function createZigzagPlatform(
+    length = 10,
+    width = 5,
+    height = 1,
+    zigzagAmount = 2,
+    frequency = 0.25,
+    segments = 100,
 
-    const triangles = [];
-    const vertices = [];
-    const indices = [];
+    travelAxis = 'y',     // SAME DEFAULT
+    zigzagAxis = 'x',     // SAME DEFAULT
+    heightAxis = 'z'      // NEW: axis that defines thickness direction
+) {
+    const axes = ['x', 'y', 'z'];
 
-    // Platform runs from -length/2 to +length/2 in X
-    const startX = -length / 2;
-    const topY = height / 2;
-    const bottomY = -height / 2;
-
-    for (let i = 0; i <= segments; i++) {
-
-        const t = i / segments;
-        const x = startX + t * length;
-
-        // Z-axis sine wave motion
-        const zOffset = Math.sin(t * Math.PI * 2 * frequency) * zigzagAmount;
-        const yOffset = 0;
-
-        // Four vertices per slice:
-        // 0: top-left     (x, topY,  -width/2 + zOffset)
-        // 1: top-right    (x, topY,   width/2 + zOffset)
-        // 2: bottom-left  (x, bottomY, -width/2 + zOffset)
-        // 3: bottom-right (x, bottomY,  width/2 + zOffset)
-
-        vertices.push(
-            x, topY,    -width/2 + zOffset,
-            x, topY,     width/2 + zOffset,
-            x, bottomY, -width/2 + zOffset,
-            x, bottomY,  width/2 + zOffset
-        );
+    // If zigzagAxis == travelAxis → choose another axis
+    if (zigzagAxis === travelAxis) {
+        zigzagAxis = axes.find(a => a !== travelAxis);
     }
 
-    // Helper
+    // Width axis is the leftover axis
+    const widthAxis = axes.find(a => a !== travelAxis && a !== zigzagAxis);
+
+    const vertices = [];
+    const indices = [];
+    const triangles = [];
+
+    const offsetTravel = -length / 2;
+
+    for (let i = 0; i <= segments; i++) {
+        const t = i / segments;
+        const travelPos = offsetTravel + t * length;
+        const wiggle = Math.sin(t * Math.PI * 2 * frequency) * zigzagAmount;
+
+        let base = { x: 0, y: 0, z: 0 };
+        base[travelAxis] = travelPos;
+        base[zigzagAxis] += wiggle;
+
+        for (let c = 0; c < 4; c++) {
+            const v = { ...base };
+
+            const widthDir = (c === 1 || c === 3) ? +1 : -1;
+            const heightDir = (c === 2 || c === 3) ? -1 : 0;
+
+            v[widthAxis] += widthDir * width / 2;
+            v[heightAxis] += heightDir * height;
+
+            vertices.push(v.x, v.y, v.z);
+        }
+    }
+
     const addTri = (a, b, c) => {
-        const v0 = new THREE.Vector3(...vertices.slice(a*3, a*3+3));
-        const v1 = new THREE.Vector3(...vertices.slice(b*3, b*3+3));
-        const v2 = new THREE.Vector3(...vertices.slice(c*3, c*3+3));
-        triangles.push({ v0, v1, v2 });
         indices.push(a, b, c);
+
+        const i0 = a * 3, i1 = b * 3, i2 = c * 3;
+        const v0 = new THREE.Vector3(vertices[i0], vertices[i0 + 1], vertices[i0 + 2]);
+        const v1 = new THREE.Vector3(vertices[i1], vertices[i1 + 1], vertices[i1 + 2]);
+        const v2 = new THREE.Vector3(vertices[i2], vertices[i2 + 1], vertices[i2 + 2]);
+
+        const normal = new THREE.Vector3()
+            .subVectors(v1, v0)
+            .cross(new THREE.Vector3().subVectors(v2, v0))
+            .normalize();
+
+        triangles.push({ v0, v1, v2, normal });
     };
 
-    // Build triangles
     for (let i = 0; i < segments; i++) {
-        const base = i * 4;
-        const next = (i + 1) * 4;
+        const c = i * 4;
+        const n = (i + 1) * 4;
 
-        // Top surface
-        addTri(base + 0, base + 1, next + 0);
-        addTri(base + 1, next + 1, next + 0);
+        // Top
+        addTri(c + 0, c + 1, n + 0);
+        addTri(c + 1, n + 1, n + 0);
 
-        // Bottom surface
-        addTri(base + 2, next + 2, base + 3);
-        addTri(base + 3, next + 2, next + 3);
+        // Bottom
+        addTri(c + 2, n + 2, c + 3);
+        addTri(c + 3, n + 2, n + 3);
 
-        // Left side (-Z)
-        addTri(base + 0, next + 0, base + 2);
-        addTri(next + 0, next + 2, base + 2);
+        // Side 1
+        addTri(c + 0, n + 0, c + 2);
+        addTri(n + 0, n + 2, c + 2);
 
-        // Right side (+Z)
-        addTri(base + 1, base + 3, next + 1);
-        addTri(next + 1, base + 3, next + 3);
+        // Side 2
+        addTri(c + 1, c + 3, n + 1);
+        addTri(n + 1, c + 3, n + 3);
     }
 
     // End caps
     addTri(0, 2, 1);
     addTri(1, 2, 3);
+
     const last = segments * 4;
     addTri(last + 0, last + 1, last + 2);
     addTri(last + 1, last + 3, last + 2);
 
     const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
     geometry.setIndex(indices);
     geometry.computeVertexNormals();
 
     return { geometry, triangles };
 }
+
 
 export function createZigZagMesh(options = {}) {
     const result = createZigzagPlatform(
@@ -263,7 +280,8 @@ export function createZigZagMesh(options = {}) {
         options.frequency || 0.25,
         options.segments || 100,
         options.travelAxis || 'x',
-        options.zigzagAxis || 'z'
+        options.zigzagAxis || 'z',
+        options.heightAxis || 'y'
     );
     
     const material = new THREE.MeshStandardMaterial({
@@ -291,8 +309,6 @@ export function createSineWaveMesh(options = {}) {
         options.waveHeight || 2,
         options.frequency || 1,
         options.segments || 100,
-        options.travelAxis || 'y',  // Add this
-        options.waveAxis || 'x'      // Add this
     );
     
     const material = new THREE.MeshStandardMaterial({
