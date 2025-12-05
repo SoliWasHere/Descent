@@ -11,6 +11,8 @@ import { GLOBALS } from './globals.js';
 // Initialize
 const canvas = document.getElementById("scene");
 const { renderer, scene, camera } = createScene(canvas);
+let isFocused = true;
+
 GLOBALS.renderer = renderer;
 GLOBALS.scene = scene;
 GLOBALS.camera = camera;
@@ -52,18 +54,47 @@ GLOBALS.gameLogic = gameLogic;
 const game = new Setup(scene, floorManager, sphereManager, inputHandler, cameraController, sunlight);
 GLOBALS.game = game;
 
+let timeOffset = 0;  // Initialize to 0 instead of performance.now()
+let lastTime = 0;
+let isFirstFrame = true;
+
 // Animation loop
 function animate(time) {
-    const currentTime = performance.now();
+    // Initialize timeOffset on first frame
+    if (isFirstFrame) {
+        timeOffset = time;
+        isFirstFrame = false;
+    }
     
-    // Update game logic
-    gameLogic.update();
+    // Adjusted game time
+    const currentTime = time - timeOffset;
     
-    // Update physics engine
-    game.update(currentTime);
+    if (isFocused) {
+        lastTime = currentTime;  // store last valid time
+        gameLogic.update();
+        game.update(currentTime);
+    }
     
     postProcessing.render(scene, camera, time);
     requestAnimationFrame(animate);
 }
 
-animate(0);
+function pauseClock() {
+    isFocused = false;
+}
+
+function resumeClock(currentRAFTime) {
+    isFocused = true;
+    // Re-align timeOffset so the game time does NOT jump
+    timeOffset = currentRAFTime - lastTime;
+}
+
+window.addEventListener("blur", pauseClock);
+window.addEventListener("focus", (e) => resumeClock(performance.now()));
+document.addEventListener("visibilitychange", () => {
+    if (document.hidden) pauseClock();
+    else resumeClock(performance.now());
+});
+
+// Start animation loop - only call once!
+requestAnimationFrame(animate);

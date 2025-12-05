@@ -15,7 +15,7 @@ export class SphereManager {
             new THREE.SphereGeometry(1, 24, 24),
             createRotatingMaterial(),
             1,
-            new THREE.Vector3(0, 0, 0),
+            new THREE.Vector3(0, 1, 0),
             new THREE.Vector3(0, 0, 0)
         );
             
