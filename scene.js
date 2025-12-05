@@ -40,7 +40,7 @@ export function setupLighting(scene) {
         sunLight.castShadow = true; // Enable shadows!
         
         // Configure shadow camera to cover a larger area
-        const shadowSize = 200; // Adjust based on your scene size
+        const shadowSize = CONFIG.shadowSize; // Adjust based on your scene size
         sunLight.shadow.camera.left = -shadowSize;
         sunLight.shadow.camera.right = shadowSize;
         sunLight.shadow.camera.top = shadowSize;
@@ -54,6 +54,7 @@ export function setupLighting(scene) {
         sunLight.shadow.bias = -0.0001; // Reduce shadow acne
         
         scene.add(sunLight);
+        return sunLight;
     }
 }
 
@@ -74,13 +75,20 @@ export function updateShadowPosition(light, caster, height = 15, shadowSize = 20
     light.target.position.set(caster.position.x, caster.position.y, caster.position.z);
     light.target.updateMatrixWorld();
 
+    shadowSize = CONFIG.shadowSize;
+
     // Adjust shadow camera to cover a small area around the object
     light.shadow.camera.left = -shadowSize;
     light.shadow.camera.right = shadowSize;
     light.shadow.camera.top = shadowSize;
     light.shadow.camera.bottom = -shadowSize;
     light.shadow.camera.near = 0.5;
-    light.shadow.camera.far = 500;
+    light.shadow.camera.far = 50;
+
+        // Higher resolution shadows
+        light.shadow.mapSize.width = 4048;
+        light.shadow.mapSize.height = 4048;
+        //light.shadow.bias = -0.0001; // Reduce shadow acne
     light.shadow.camera.updateProjectionMatrix();
 }
 
