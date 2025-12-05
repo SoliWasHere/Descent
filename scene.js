@@ -6,9 +6,11 @@ export function createScene(canvas) {
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
 
-    if (!CONFIG.isLighted) {
-        renderer.shadowMap.enabled = false; // disable shadows globally
-    }
+   if (CONFIG.isLighted) {
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.BasicShadowMap;
+        //renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Softer shadows
+    } 
     // Scene
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x1d1e2c);
@@ -27,21 +29,33 @@ export function createScene(canvas) {
 }
 
 export function setupLighting(scene) {
-    // Always add base ambient light so objects are visible
     if (!CONFIG.isLighted) {
-    const ambientLight = new THREE.AmbientLight(0xffffff, 15);
-    scene.add(ambientLight);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 15);
+        scene.add(ambientLight);
     }
 
-    // Add directional light only if CONFIG.isLighted is true
     if (CONFIG.isLighted) {
         const sunLight = new THREE.DirectionalLight(0xffffff, 4);
-        sunLight.position.set(0, 15, 0); // top sunlight
-        sunLight.castShadow = false;
+        sunLight.position.set(50, 100, 50); // Position light at an angle
+        sunLight.castShadow = true; // Enable shadows!
+        
+        // Configure shadow camera to cover a larger area
+        const shadowSize = 200; // Adjust based on your scene size
+        sunLight.shadow.camera.left = -shadowSize;
+        sunLight.shadow.camera.right = shadowSize;
+        sunLight.shadow.camera.top = shadowSize;
+        sunLight.shadow.camera.bottom = -shadowSize;
+        sunLight.shadow.camera.near = 0.5;
+        sunLight.shadow.camera.far = 500;
+        
+        // Higher resolution shadows
+        sunLight.shadow.mapSize.width = 2048;
+        sunLight.shadow.mapSize.height = 2048;
+        sunLight.shadow.bias = -0.0001; // Reduce shadow acne
+        
         scene.add(sunLight);
     }
 }
- 
 
 
 export function setupResizeHandler(renderer, camera) {
@@ -51,3 +65,22 @@ export function setupResizeHandler(renderer, camera) {
         camera.updateProjectionMatrix();
     });
 }
+
+export function updateShadowPosition(light, caster, height = 15, shadowSize = 20) {
+    // Position the light above the object
+    light.position.set(caster.position.x, caster.position.y + height, caster.position.z);
+
+    // Aim the light at the object
+    light.target.position.set(caster.position.x, caster.position.y, caster.position.z);
+    light.target.updateMatrixWorld();
+
+    // Adjust shadow camera to cover a small area around the object
+    light.shadow.camera.left = -shadowSize;
+    light.shadow.camera.right = shadowSize;
+    light.shadow.camera.top = shadowSize;
+    light.shadow.camera.bottom = -shadowSize;
+    light.shadow.camera.near = 0.5;
+    light.shadow.camera.far = 500;
+    light.shadow.camera.updateProjectionMatrix();
+}
+
