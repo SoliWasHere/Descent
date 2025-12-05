@@ -12,7 +12,7 @@ export class SphereManager {
     createSpheres() {
         for (let i = 0; i < CONFIG.numSpheres; i++) {
             const sphere = new PhysicsObject(
-                new THREE.SphereGeometry(1, 32, 32),
+                new THREE.SphereGeometry(1, 24, 12),
                 createRotatingMaterial(),
                 1,
                 new THREE.Vector3((i - 1) * 2.5, CONFIG.sphereStartY, 0),
