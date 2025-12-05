@@ -67,17 +67,27 @@ export function setupResizeHandler(renderer, camera) {
     });
 }
 
-export function updateShadowPosition(light, caster, height = 15, shadowSize = 20) {
-    // Position the light above the object
-    light.position.set(caster.position.x, caster.position.y + height, caster.position.z);
+export function updateShadowPosition(light, caster, height = 15, shadowSize = 20, angle = { x: 1, z: 1 }) {
+    // Normalize the angle vector
+    const length = Math.sqrt(angle.x * angle.x + angle.z * angle.z);
+    const nx = angle.x / length;
+    const nz = angle.z / length;
+
+    // Position the light above the object at an angle
+    light.position.set(
+        caster.position.x + nx * height,
+        caster.position.y + height,
+        caster.position.z + nz * height
+    );
 
     // Aim the light at the object
     light.target.position.set(caster.position.x, caster.position.y, caster.position.z);
     light.target.updateMatrixWorld();
 
-    shadowSize = CONFIG.shadowSize;
+    // Use shadowSize from CONFIG if available
+    shadowSize = CONFIG.shadowSize || shadowSize;
 
-    // Adjust shadow camera to cover a small area around the object
+    // Adjust shadow camera
     light.shadow.camera.left = -shadowSize;
     light.shadow.camera.right = shadowSize;
     light.shadow.camera.top = shadowSize;
@@ -85,10 +95,11 @@ export function updateShadowPosition(light, caster, height = 15, shadowSize = 20
     light.shadow.camera.near = 0.5;
     light.shadow.camera.far = 50;
 
-        // Higher resolution shadows
-        light.shadow.mapSize.width = 4048;
-        light.shadow.mapSize.height = 4048;
-        //light.shadow.bias = -0.0001; // Reduce shadow acne
+    // High resolution
+    light.shadow.mapSize.width = 4048;
+    light.shadow.mapSize.height = 4048;
+
     light.shadow.camera.updateProjectionMatrix();
 }
+
 
