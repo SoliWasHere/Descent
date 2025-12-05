@@ -5,7 +5,7 @@ import { GLOBALS } from './globals.js';
 export class InputHandler {
     constructor() {
         this.keysHeld = {};
-        this.cameraDisplace = [0, 0, 0];
+        this.cameraDisplace = [-10*Math.PI, 0, 0];
         this.setupEventListeners();
     }
 
