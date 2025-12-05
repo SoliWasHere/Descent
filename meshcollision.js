@@ -43,131 +43,145 @@ export class MeshCollider {
         return triangles;
     }
     
-collideSphere(sphere, dt = 0.016) {
+collideSphere(sphere, friction = 0.5, restitution = 0.7, dt = 0.016) {
     if (sphere.isStatic) return false;
+
+    const nearby = this.getNearbyTriangles(sphere.position, sphere.radius, 5);
     
-    const worldMatrix = this.mesh.matrixWorld;
-    
-    // Find the deepest penetration
+    if (nearby.length === 0) {
+        if (Math.random() < 0.01) {
+            console.log(`No nearby triangles for sphere at (${sphere.position.x.toFixed(1)}, ${sphere.position.y.toFixed(1)}, ${sphere.position.z.toFixed(1)})`);
+        }
+        return false;
+    }
+
     let deepestPenetration = -Infinity;
     let bestContact = null;
-    let debugInfo = { topHits: 0, sideHits: 0, bottomHits: 0, totalChecked: 0, penetrations: [] };
-    
-    for (const triangle of this.triangles) {
-        const v0 = triangle.v0.clone().applyMatrix4(worldMatrix);
-        const v1 = triangle.v1.clone().applyMatrix4(worldMatrix);
-        const v2 = triangle.v2.clone().applyMatrix4(worldMatrix);
+    let debugInfo = [];
+    let detailedSample = null;
+
+    for (let i = 0; i < nearby.length; i++) {
+        const triangle = nearby[i];
+        const closest = this.closestPointOnTriangle(
+            sphere.position, 
+            triangle.v0, 
+            triangle.v1, 
+            triangle.v2
+        );
         
-        debugInfo.totalChecked++;
-        
-        const closest = this.closestPointOnTriangle(sphere.position, v0, v1, v2);
         const toSphere = new THREE.Vector3().subVectors(sphere.position, closest);
         const distance = toSphere.length();
         const penetration = sphere.radius - distance;
-        
-        // Better face classification
-        const edge1 = new THREE.Vector3().subVectors(v1, v0);
-        const edge2 = new THREE.Vector3().subVectors(v2, v0);
-        const faceNormal = new THREE.Vector3().crossVectors(edge1, edge2).normalize();
-        
-        const isTopFace = faceNormal.y > 0.7;
-        const isBottomFace = faceNormal.y < -0.7;
-        
+
+        // Capture detailed info for first triangle
+        if (i === 0) {
+            detailedSample = {
+                spherePos: sphere.position.clone(),
+                sphereRadius: sphere.radius,
+                triV0: triangle.v0.clone(),
+                triV1: triangle.v1.clone(),
+                triV2: triangle.v2.clone(),
+                closestPoint: closest.clone(),
+                distance: distance,
+                penetration: penetration
+            };
+        }
+
+        debugInfo.push({
+            penetration: penetration.toFixed(3),
+            distance: distance.toFixed(3),
+            normalY: triangle.normal.y.toFixed(3),
+            closestY: closest.y.toFixed(3)
+        });
+
         if (penetration > 0) {
-            debugInfo.penetrations.push({
-                pen: penetration.toFixed(3),
-                dist: distance.toFixed(3),
-                type: isTopFace ? 'TOP' : (isBottomFace ? 'BOT' : 'SIDE')
-            });
-            
-            if (isTopFace) debugInfo.topHits++;
-            else if (isBottomFace) debugInfo.bottomHits++;
-            else debugInfo.sideHits++;
-            
             if (penetration > deepestPenetration) {
                 deepestPenetration = penetration;
+
+                const sphereToTriangle = new THREE.Vector3().subVectors(triangle.v0, sphere.position);
+                let normal = triangle.normal.clone();
                 
-                let normal;
-                if (distance > 1e-6) {
-                    normal = toSphere.clone().normalize();
-                } else {
-                    normal = faceNormal.clone();
-                    if (normal.dot(new THREE.Vector3().subVectors(sphere.position, v0)) < 0) {
-                        normal.negate();
-                    }
+                if (normal.dot(sphereToTriangle) > 0) {
+                    normal.negate();
                 }
-                
+
                 bestContact = {
                     point: closest,
                     normal: normal,
                     penetration: penetration,
-                    faceType: isTopFace ? 'TOP' : (isBottomFace ? 'BOT' : 'SIDE')
+                    triangle: triangle
                 };
             }
         }
     }
-    
+
+    // Log detailed sample every time
+    if (nearby.length > 0 && Math.random() < 0.05) {
+        console.log(`=== DETAILED COLLISION CHECK ===`);
+        console.log(`Sphere: pos=(${detailedSample.spherePos.x.toFixed(2)}, ${detailedSample.spherePos.y.toFixed(2)}, ${detailedSample.spherePos.z.toFixed(2)}), radius=${detailedSample.sphereRadius}`);
+        console.log(`Triangle v0=(${detailedSample.triV0.x.toFixed(2)}, ${detailedSample.triV0.y.toFixed(2)}, ${detailedSample.triV0.z.toFixed(2)})`);
+        console.log(`Triangle v1=(${detailedSample.triV1.x.toFixed(2)}, ${detailedSample.triV1.y.toFixed(2)}, ${detailedSample.triV1.z.toFixed(2)})`);
+        console.log(`Triangle v2=(${detailedSample.triV2.x.toFixed(2)}, ${detailedSample.triV2.y.toFixed(2)}, ${detailedSample.triV2.z.toFixed(2)})`);
+        console.log(`Closest point=(${detailedSample.closestPoint.x.toFixed(2)}, ${detailedSample.closestPoint.y.toFixed(2)}, ${detailedSample.closestPoint.z.toFixed(2)})`);
+        console.log(`Distance=${detailedSample.distance.toFixed(3)}, Penetration=${detailedSample.penetration.toFixed(3)}`);
+        console.log(`Checked ${nearby.length} triangles, ${debugInfo.filter(d => parseFloat(d.penetration) > 0).length} penetrations`);
+    }
+
     if (bestContact) {
-        console.log(`Collision at sphere Y=${sphere.position.y.toFixed(2)}: top=${debugInfo.topHits}, bottom=${debugInfo.bottomHits}, side=${debugInfo.sideHits}, best=${bestContact.faceType}, pen=${bestContact.penetration.toFixed(3)}`);
-        if (debugInfo.penetrations.length < 10) {
-            console.log('  Penetrations:', debugInfo.penetrations);
-        }
-        
-        // Manual collision resolution
+        // ... rest of collision response code stays the same
         sphere.position.addScaledVector(bestContact.normal, bestContact.penetration);
         sphere.mesh.position.copy(sphere.position);
-        
+
         const ra = bestContact.point.clone().sub(sphere.position);
         const velAtContact = sphere.velocity.clone().add(
             new THREE.Vector3().crossVectors(sphere.angularVelocity, ra)
         );
-        
+
         const velAlongNormal = velAtContact.dot(bestContact.normal);
-        
+
         if (velAlongNormal < 0) {
-            const e = Math.min(sphere.restitution, this.restitution);
             const invMass = 1 / sphere.mass;
             const invInertia = (sphere.momentOfInertia > 0 && sphere.momentOfInertia !== Infinity) 
-                ? 1 / sphere.momentOfInertia : 0;
-            
+                ? 1 / sphere.momentOfInertia 
+                : 0;
+
             const raCrossN = new THREE.Vector3().crossVectors(ra, bestContact.normal);
             const angularTerm = raCrossN.lengthSq() * invInertia;
             const invEffectiveMass = invMass + angularTerm;
-            
-            const j = -(1 + e) * velAlongNormal / invEffectiveMass;
+
+            const j = -(1 + restitution) * velAlongNormal / invEffectiveMass;
             const impulse = bestContact.normal.clone().multiplyScalar(j);
-            
+
             sphere.velocity.addScaledVector(impulse, invMass);
             sphere.angularVelocity.add(raCrossN.multiplyScalar(j * invInertia));
-            
-            // Friction
+
             const tangent = velAtContact.clone().sub(
                 bestContact.normal.clone().multiplyScalar(velAlongNormal)
             );
             const tangentLen = tangent.length();
-            
+
             if (tangentLen > 1e-6) {
                 tangent.normalize();
                 const raCrossT = new THREE.Vector3().crossVectors(ra, tangent);
                 const angularTermT = raCrossT.lengthSq() * invInertia;
                 const invEffMassT = invMass + angularTermT;
-                
+
                 const jt = -velAtContact.dot(tangent) / invEffMassT;
-                const mu = Math.min(sphere.friction, this.friction);
-                const frictionScalar = THREE.MathUtils.clamp(jt, -Math.abs(j) * mu, Math.abs(j) * mu);
-                
+                const frictionScalar = THREE.MathUtils.clamp(
+                    jt, 
+                    -Math.abs(j) * friction, 
+                    Math.abs(j) * friction
+                );
+
                 const frictionImpulse = tangent.clone().multiplyScalar(frictionScalar);
                 sphere.velocity.addScaledVector(frictionImpulse, invMass);
                 sphere.angularVelocity.add(raCrossT.multiplyScalar(frictionScalar * invInertia));
             }
         }
-        
+
         return true;
-    } else if (Math.random() < 0.01) {
-        // Occasionally log when no collision detected
-        console.log(`No collision at sphere Y=${sphere.position.y.toFixed(2)}, checked ${debugInfo.totalChecked} triangles`);
     }
-    
+
     return false;
 }
     closestPointOnTriangle(point, v0, v1, v2) {
