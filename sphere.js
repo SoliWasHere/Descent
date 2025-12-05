@@ -10,24 +10,22 @@ export class SphereManager {
     }
 
     createSpheres() {
-        for (let i = 0; i < CONFIG.numSpheres; i++) {
-            const sphere = new PhysicsObject(
-                new THREE.SphereGeometry(1, 24, 12),
-                createRotatingMaterial(),
-                1,
-                new THREE.Vector3((i - 1) * 2.5, CONFIG.sphereStartY, 0),
-                new THREE.Vector3(0, 0, 0)
-            );
+        const sphere = new PhysicsObject(
+            new THREE.SphereGeometry(1, 24, 24),
+            createRotatingMaterial(),
+            1,
+            new THREE.Vector3(0, 0, 0),
+            new THREE.Vector3(0, 0, 0)
+        );
             
-            sphere.friction = 1;
-            sphere.angularVelocity.set(0, 0, 0);
+        sphere.friction = 1;
+        sphere.angularVelocity.set(0, 0, 0);
 
-            sphere.mesh.castShadow = true; 
-            sphere.mesh.receiveShadow = true;
+        sphere.mesh.castShadow = true; 
+        sphere.mesh.receiveShadow = true;
             
-            this.scene.add(sphere.mesh);
-            this.spheres.push(sphere);
-        }
+        this.scene.add(sphere.mesh);
+        this.spheres.push(sphere);
     }
 
     applyGravity() {

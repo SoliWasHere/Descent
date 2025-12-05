@@ -24,11 +24,13 @@ export class Game {
         this.inputHandler.handleInput(mainSphere, dt);
 
         // Spawn floor under ball
+        /*
         if (currentTime - this.lastFloorSpawn >= CONFIG.floorSpawnInterval) {
             const pos = mainSphere.position;
             const floor = this.floorManager.createFloor(pos.x, pos.y, pos.z);
             this.lastFloorSpawn = currentTime;
         }
+        */
 
         // Update physics
         this.sphereManager.applyGravity();

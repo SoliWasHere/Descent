@@ -11,5 +11,5 @@ export const CONFIG = {
     cameraShiftSpeed: 20,
     floorSpawnInterval: 1000,
     isLighted: true,
-    shadowSize: 300,
+    shadowSize: 30,
 };

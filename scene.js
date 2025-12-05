@@ -96,8 +96,8 @@ export function updateShadowPosition(light, caster, height = 15, shadowSize = 20
     light.shadow.camera.far = 50;
 
     // High resolution
-    light.shadow.mapSize.width = 4048;
-    light.shadow.mapSize.height = 4048;
+    light.shadow.mapSize.width = Math.pow(2, 9)+1;
+    light.shadow.mapSize.height = Math.pow(2, 9)+1;
 
     light.shadow.camera.updateProjectionMatrix();
 }

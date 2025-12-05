@@ -91,7 +91,7 @@ function createRotatingMaterial() {
             
             // Calculate binary shadow (is this face lit or not?)
             float luminance = dot(lighting, vec3(0.299, 0.587, 0.114));
-            float isLit = step(0.15, luminance); // Threshold for black vs colored
+            float isLit = max(step(0.15, luminance),0.15); // Threshold for black vs colored
             
             // Apply base colors
             vec3 baseColor = mix(color1, color2, checker);
