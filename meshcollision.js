@@ -153,7 +153,6 @@ export class MeshCollider {
 			}
 		}
 
-		// Log detailed sample every time
 		if (nearby.length > 0 && Math.random() < 0.05) {
 			console.log(`=== DETAILED COLLISION CHECK ===`);
 			console.log(
@@ -180,7 +179,6 @@ export class MeshCollider {
 		}
 
 		if (bestContact) {
-			// ... rest of collision response code stays the same
 			sphere.position.addScaledVector(
 				bestContact.normal,
 				bestContact.penetration,
@@ -263,6 +261,9 @@ export class MeshCollider {
 
 		return false;
 	}
+
+    //Copy and pasted... No idea how it works... 
+    //TODO: STUDY
 	closestPointOnTriangle(point, v0, v1, v2) {
 		const edge0 = new THREE.Vector3().subVectors(v1, v0);
 		const edge1 = new THREE.Vector3().subVectors(v2, v0);

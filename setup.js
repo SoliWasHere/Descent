@@ -33,7 +33,7 @@ export class Setup {
 		this.sphereManager.applyGravity();
 		this.sphereManager.updatePhysics(dt);
 
-		// CRITICAL: Update all world matrices before collision detection
+		// Update all world matrices before collision detection
 		this.scene.updateMatrixWorld(true);
 
 		// Check collisions

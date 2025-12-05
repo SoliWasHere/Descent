@@ -203,9 +203,9 @@ export function createZigzagPlatform(
 	frequency = 0.25,
 	segments = 100,
 
-	travelAxis = "y", // SAME DEFAULT
-	zigzagAxis = "x", // SAME DEFAULT
-	heightAxis = "z", // NEW: axis that defines thickness direction
+	travelAxis = "y",
+	zigzagAxis = "x",
+	heightAxis = "z",
 ) {
 	const axes = ["x", "y", "z"];
 

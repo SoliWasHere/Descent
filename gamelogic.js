@@ -26,7 +26,7 @@ export class GameLogic {
 
 		GLOBALS.scene.add(result.mesh);
 
-		// CRITICAL: Force matrix update immediately after adding to scene
+		// Force matrix update immediately after adding to scene
 		result.mesh.updateMatrixWorld(true);
 
 		// Transform triangles to world space

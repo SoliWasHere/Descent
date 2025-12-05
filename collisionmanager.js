@@ -153,7 +153,7 @@ export class MeshCollider {
 	}
 
 	sphereTriangleSweep(pos, dir, distance, radius, tri) {
-		// Approximation: treat triangle as plane first
+		// Treat triangle as plane first
 		const { v0, normal } = tri;
 		const denom = normal.dot(dir);
 		if (Math.abs(denom) < 1e-6) return null; // parallel
