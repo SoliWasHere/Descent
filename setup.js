@@ -13,35 +13,38 @@ export class Setup {
         this.lastTime = performance.now();
     }
 
-    update(currentTime) {
-        const dt = (currentTime - this.lastTime) / 1000;
-        this.lastTime = currentTime;
+update(currentTime) {
+    const dt = (currentTime - this.lastTime) / 1000;
+    this.lastTime = currentTime;
 
-        const mainSphere = this.sphereManager.getMainSphere();
+    // Clamp dt to prevent huge jumps (like when tab loses focus)
+    const clampedDt = Math.min(dt, 0.033); // Max 33ms (30fps minimum)
 
-        // Handle input
-        this.inputHandler.handleInput(mainSphere, dt);
+    const mainSphere = this.sphereManager.getMainSphere();
 
-        // Update physics
-        this.sphereManager.applyGravity();
-        this.sphereManager.updatePhysics(dt);
+    // Handle input
+    this.inputHandler.handleInput(mainSphere, clampedDt);
 
-        // Check collisions
-        for (const sphere of this.sphereManager.spheres) {
-            this.floorManager.checkCollisions(sphere, dt);
-        }
-        this.sphereManager.handleSphereSphereCollisions();
+    // Update physics
+    this.sphereManager.applyGravity();
+    this.sphereManager.updatePhysics(clampedDt);
 
-        // Update camera with occlusion detection (pass floors array)
-        this.cameraController.followTarget(
-            mainSphere.position,
-            this.inputHandler.cameraDisplace,
-            this.floorManager.floors  // Pass floors for occlusion checking
-        );
+    // Check collisions
+    for (const sphere of this.sphereManager.spheres) {
+        this.floorManager.checkCollisions(sphere, clampedDt);
+    }
+    this.sphereManager.handleSphereSphereCollisions();
 
-        // Update shadow position to follow main sphere
-        if (CONFIG.isLighted && this.sunLight) {
-            updateShadowPosition(this.sunLight, mainSphere, 15, 20);
-        }
-    }   
+    // Update camera
+    this.cameraController.followTarget(
+        mainSphere.position,
+        this.inputHandler.cameraDisplace,
+        this.floorManager.floors
+    );
+
+    // Update shadow
+    if (CONFIG.isLighted && this.sunLight) {
+        updateShadowPosition(this.sunLight, mainSphere, 15, 20);
+    }
+}
 }
