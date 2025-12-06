@@ -10,38 +10,30 @@ export class GameLogic {
         
         // Summon initial floor
         this.floorManager.createFloor(0, 0, 0); 
-        
-const outerSquare = [
-    new THREE.Vector3(-10, -10, 0),
-    new THREE.Vector3(-10, 10, 0),
-    new THREE.Vector3(10, 10, 0),
-    new THREE.Vector3(10, -10, 0)
-];
-
-const innerCircle = [];
-for (let i = 0; i < 100; i++) {
-    const angle = (i / 100) * Math.PI * 2;
-    innerCircle.push(new THREE.Vector3(
-        Math.cos(angle) * 5,
-        Math.sin(angle) * 5,
-        0
-    ));
-}
-
-floorManager.createCustomShape(
-    0, 0, 0,
-    outerSquare,
-    [innerCircle],
-    t => 0,       // straight path
-    t => 0,            // flat
-    t => t*30,
-    t => 0,
-    t => 0,
-    t => 0,
-    0, 2, 100
-);
+        this.displace =-Math.sin(
+            ((Math.PI*2)/360)*10
+        )*16;
     }
 
     update() {
+        let offset = -Math.sin(
+            ((Math.PI*2)/360)*10
+        )*19;
+        if (GLOBALS.player.PhysicsObject.position.x > this.floorCounts * 5) {
+            this.floorCounts++;
+            this.floorManager.createFloor(
+                this.floorCounts * 5,
+                0+this.displace,
+                0,
+                10,
+                1,
+                10,
+                0,
+                0,
+                -10
+            )
+            this.displace=offset + this.displace;
+            //console.log(displace);
+        }
     }
 }

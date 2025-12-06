@@ -542,6 +542,7 @@ createCustomShape(x, y, z, outerPoints, innerPoints, funcX, funcY, funcZ, rotX, 
     
     return shape;
 }
+
 // Add to objects.js
 
 // Import earcut at the top of your file:

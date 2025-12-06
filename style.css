@@ -2,8 +2,12 @@ body {
     background-color: white;
 }
 
-p {
-    color: black;
+#FPS {
+    color: red;
+    position: absolute;
+    font-size: 50px;
+    top: 0px;
+    left: 0px;
 }
 
 html, body {

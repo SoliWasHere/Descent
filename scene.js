@@ -8,7 +8,7 @@ export function createScene(canvas) {
 
    if (CONFIG.isLighted) {
         renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.PCDHardShadowMap; // Keep pixelated
+        renderer.shadowMap.type = THREE.VSMShadowMap;
     } 
     // Scene
     const scene = new THREE.Scene();
@@ -31,35 +31,42 @@ export function setupLighting(scene) {
     if (!CONFIG.isLighted) {
         const ambientLight = new THREE.AmbientLight(0xffffff, 15);
         scene.add(ambientLight);
+        return null;
     }
 
     if (CONFIG.isLighted) {
-        const sunLight = new THREE.DirectionalLight(0xffffff, 4);
-        sunLight.position.set(50, 100, 50);
+        // Main directional sunlight - FIXED: doesn't move, always lights everything
+        const sunLight = new THREE.DirectionalLight(0xffffff, 3);
+        sunLight.position.set(100, 150, 100);
         sunLight.castShadow = true;
-
-        const ambientLight = new THREE.AmbientLight(0xffffff, 2);
-        scene.add(ambientLight);
         
-        const shadowSize = CONFIG.shadowSize;
+        // Make shadow frustum MUCH larger to cover whole scene
+        const shadowSize = 100; // Increased from 30
         sunLight.shadow.camera.left = -shadowSize;
         sunLight.shadow.camera.right = shadowSize;
         sunLight.shadow.camera.top = shadowSize;
         sunLight.shadow.camera.bottom = -shadowSize;
         sunLight.shadow.camera.near = 0.5;
-        sunLight.shadow.camera.far = 500;
+        sunLight.shadow.camera.far = 1000; // Increased from 500
         
-        // Higher resolution for cleaner base, will pixelate with dithering
-        sunLight.shadow.mapSize.width = 1024;
-        sunLight.shadow.mapSize.height = 1024;
-        sunLight.shadow.bias = -0.001;
+        sunLight.shadow.mapSize.width = 2048; // Increased for better quality
+        sunLight.shadow.mapSize.height = 2048;
+        sunLight.shadow.bias = -0.0001;
         sunLight.shadow.normalBias = 0.02;
         
         scene.add(sunLight);
+        
+        // Add strong ambient light so everything has base illumination
+        const ambientLight = new THREE.AmbientLight(0x606080, 1.2);
+        scene.add(ambientLight);
+        
+        // Add hemisphere light for natural sky/ground lighting
+        const hemiLight = new THREE.HemisphereLight(0xFFFFFF, 0x404040, 0.8);
+        scene.add(hemiLight);
+        
         return sunLight;
     }
 }
-
 
 export function setupResizeHandler(renderer, camera) {
     window.addEventListener("resize", () => {
@@ -70,33 +77,7 @@ export function setupResizeHandler(renderer, camera) {
 }
 
 export function updateShadowPosition(light, caster, height = 15, shadowSize = 20, angle = { x: 1, z: 1 }) {
-    const length = Math.sqrt(angle.x * angle.x + angle.z * angle.z);
-    const nx = angle.x / length;
-    const nz = angle.z / length;
-
-    light.position.set(
-        caster.position.x + nx * height,
-        caster.position.y + height,
-        caster.position.z + nz * height
-    );
-
+    // Only update target, not light position (light stays stationary now)
     light.target.position.set(caster.position.x, caster.position.y, caster.position.z);
     light.target.updateMatrixWorld();
-
-    shadowSize = CONFIG.shadowSize || shadowSize;
-
-    light.shadow.camera.left = -shadowSize;
-    light.shadow.camera.right = shadowSize;
-    light.shadow.camera.top = shadowSize;
-    light.shadow.camera.bottom = -shadowSize;
-    light.shadow.camera.near = 0.5;
-    light.shadow.camera.far = 50;
-
-    light.shadow.mapSize.width = 1024;
-    light.shadow.mapSize.height = 1024;
-    
-    light.shadow.bias = -0.001;
-    light.shadow.normalBias = 0.02;
-
-    light.shadow.camera.updateProjectionMatrix();
 }

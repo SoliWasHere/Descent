@@ -7,30 +7,33 @@ function createRotatingMaterial() {
         flatShading: true
     });
 
-    // Octahedron vertices (6 vertices at ±1 on each axis)
+    // Octahedron vertices
     const vertices = [
-        new THREE.Vector3(1, 0, 0),   // 0: +X
-        new THREE.Vector3(-1, 0, 0),  // 1: -X
-        new THREE.Vector3(0, 1, 0),   // 2: +Y
-        new THREE.Vector3(0, -1, 0),  // 3: -Y
-        new THREE.Vector3(0, 0, 1),   // 4: +Z
-        new THREE.Vector3(0, 0, -1)   // 5: -Z
+        new THREE.Vector3(1, 0, 0),
+        new THREE.Vector3(-1, 0, 0),
+        new THREE.Vector3(0, 1, 0),
+        new THREE.Vector3(0, -1, 0),
+        new THREE.Vector3(0, 0, 1),
+        new THREE.Vector3(0, 0, -1)
     ];
 
-    // Octahedron faces (8 triangles)
+    // Faces
     const faces = [
-        [0, 2, 4], [0, 4, 3], [0, 3, 5], [0, 5, 2],  // faces touching +X
-        [1, 4, 2], [1, 3, 4], [1, 5, 3], [1, 2, 5]   // faces touching -X
+        [0, 2, 4], [0, 4, 3], [0, 3, 5], [0, 5, 2],
+        [1, 4, 2], [1, 3, 4], [1, 5, 3], [1, 2, 5]
     ];
 
-    // 2-coloring (alternating pattern)
+    // Alternating color pattern
     const faceColors = [0, 1, 0, 1, 1, 0, 1, 0];
 
     material.onBeforeCompile = (shader) => {
         shader.uniforms.color1 = { value: new THREE.Color(0x0077ff) };
         shader.uniforms.color2 = { value: new THREE.Color(0xffffff) };
 
-        // Pass vertices as uniforms
+        // Threshold control uniform
+        shader.uniforms.uThreshold = { value: 0.35 };
+
+        // Pass vertices
         for (let i = 0; i < 6; i++) {
             shader.uniforms[`v${i}`] = { value: vertices[i] };
         }
@@ -47,6 +50,7 @@ function createRotatingMaterial() {
             vObjectPosition = position;`
         );
 
+        // Generate vertex uniform declarations
         let uniformDecl = '';
         for (let i = 0; i < 6; i++) {
             uniformDecl += `uniform vec3 v${i};\n`;
@@ -57,11 +61,12 @@ function createRotatingMaterial() {
             `#include <common>
             uniform vec3 color1;
             uniform vec3 color2;
+            uniform float uThreshold;
             ${uniformDecl}
             varying vec3 vObjectPosition;`
         );
 
-        // Generate code to find closest face
+        // Build face detection GLSL
         let faceChecks = '';
         faces.forEach((face, idx) => {
             const [a, b, c] = face;
@@ -77,27 +82,34 @@ function createRotatingMaterial() {
             }`;
         });
 
-        // Replace AFTER lighting calculations are done
+        // Insert final shading logic
         shader.fragmentShader = shader.fragmentShader.replace(
             '#include <opaque_fragment>',
             `#include <opaque_fragment>
+
             vec3 p = normalize(vObjectPosition);
             float maxDot = -1.0;
             float checker = 0.0;
             ${faceChecks}
-            
-            // Get the lighting result that Three.js calculated
+
+            // Existing lighting result
             vec3 lighting = gl_FragColor.rgb;
-            
-            // Calculate binary shadow (is this face lit or not?)
+
+            // Perceptual brightness
             float luminance = dot(lighting, vec3(0.299, 0.587, 0.114));
-            float isLit = max(step(0.15, luminance),0.15); // Threshold for black vs colored
-            
-            // Apply base colors
+
+            // Two-step lighting:
+            float bright = luminance > uThreshold ? 1.0 : 0.0;
+
+            // Dark = 0.10, Light = 1.0
+            float steppedLight = mix(0.40, 1.0, bright);
+
+            // Face-based color selection
             vec3 baseColor = mix(color1, color2, checker);
-            
-            // Binary shading: either full color or black
-            gl_FragColor.rgb = baseColor * isLit;`
+
+            // Final output
+            gl_FragColor.rgb = baseColor * steppedLight;
+        `
         );
     };
 
