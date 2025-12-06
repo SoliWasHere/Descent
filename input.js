@@ -53,7 +53,7 @@ export class InputHandler {
         const camShift = CONFIG.cameraShiftSpeed * dt;
         if (this.keysHeld['ArrowUp'])    this.cameraDisplace[1] += camShift;
         if (this.keysHeld['ArrowDown'])  this.cameraDisplace[1] -= camShift;
-        if (this.keysHeld['ArrowLeft'])  this.cameraDisplace[0] -= camShift;
-        if (this.keysHeld['ArrowRight']) this.cameraDisplace[0] += camShift;
+        if (this.keysHeld['ArrowLeft'])  this.cameraDisplace[0] += camShift;
+        if (this.keysHeld['ArrowRight']) this.cameraDisplace[0] -= camShift; 
     }
 }

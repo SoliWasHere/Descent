@@ -1,6 +1,5 @@
 import { GLOBALS } from './globals.js';
-//gamelogic.js
-
+import * as THREE from 'https://unpkg.com/three@0.181.0/build/three.module.js';
 
 export class GameLogic {
     constructor(floorManager, sphereManager) {
@@ -9,30 +8,29 @@ export class GameLogic {
         this.currentFloorX = 0;
         this.floorCounts = 0;
         
-        // Summon a cube at 0,0,0 of size 10
-        this.floorManager.createFloor(0, 0, 0);
+        // Summon initial floor
+        //this.floorManager.createFloor(0, 0, 0);
+        
+        // Example: Create a sine wave floor
+        let a = 1; 
+        let b = 5;
+        const quadPoints = [
+            new THREE.Vector3(-5/a, 0, -5/b),
+            new THREE.Vector3(-5/a, 0, 5/b),
+            new THREE.Vector3(5/a, 0, 5/b),
+            new THREE.Vector3(5/a, 0, -5/b)
+        ];
+        
+        a = this.floorManager.createCustomFloor(
+            0, -3, 0,  // position offset
+            quadPoints,
+            t => t*10,           // funcX: linear progression
+            t => Math.pow(t, 4),  // funcY: quadratic progression
+            t => 0,                // funcZ: no z offset
+            -2.3, 2.3, 1000               // a=0, b=1, t=50 steps
+        );
     }
 
     update() {
-        //console.log(GLOBALS.player.PhysicsObject.position.x);
-        if (GLOBALS.player.PhysicsObject.position.x > this.currentFloorX + 5) {
-            this.currentFloorX += 5;
-            if (this.floorCounts % 5 === 0 && this.floorCounts !== 0) {
-                // Create a tilted floor every 5 floors
-                const angle = Math.PI/2  /4 ; // Random angle between -0.2 and 0.2 radians
-                this.floorManager.createFloor(this.currentFloorX, 0, 0,
-                    10, 1, 10,
-                    0, 0, angle
-                );
-            } else {
-                // Create a normal floor
-                this.floorManager.createFloor(this.currentFloorX, 0, 0,
-                    10, 1, 10,
-                    0, 0, 0
-                );
-            }
-            this.floorCounts++;
-            // Do something when the player's x position is greater than 5
-        }
     }
 }

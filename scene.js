@@ -8,8 +8,7 @@ export function createScene(canvas) {
 
    if (CONFIG.isLighted) {
         renderer.shadowMap.enabled = true;
-        renderer.shadowMap.type = THREE.BasicShadowMap;
-        //renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Softer shadows
+        renderer.shadowMap.type = THREE.PCDHardShadowMap; // Keep pixelated
     } 
     // Scene
     const scene = new THREE.Scene();
@@ -36,11 +35,10 @@ export function setupLighting(scene) {
 
     if (CONFIG.isLighted) {
         const sunLight = new THREE.DirectionalLight(0xffffff, 4);
-        sunLight.position.set(50, 100, 50); // Position light at an angle
-        sunLight.castShadow = true; // Enable shadows!
+        sunLight.position.set(50, 100, 50);
+        sunLight.castShadow = true;
         
-        // Configure shadow camera to cover a larger area
-        const shadowSize = CONFIG.shadowSize; // Adjust based on your scene size
+        const shadowSize = CONFIG.shadowSize;
         sunLight.shadow.camera.left = -shadowSize;
         sunLight.shadow.camera.right = shadowSize;
         sunLight.shadow.camera.top = shadowSize;
@@ -48,10 +46,11 @@ export function setupLighting(scene) {
         sunLight.shadow.camera.near = 0.5;
         sunLight.shadow.camera.far = 500;
         
-        // Higher resolution shadows
-        sunLight.shadow.mapSize.width = 2048;
-        sunLight.shadow.mapSize.height = 2048;
-        sunLight.shadow.bias = -0.0001; // Reduce shadow acne
+        // Higher resolution for cleaner base, will pixelate with dithering
+        sunLight.shadow.mapSize.width = 1024;
+        sunLight.shadow.mapSize.height = 1024;
+        sunLight.shadow.bias = -0.001;
+        sunLight.shadow.normalBias = 0.02;
         
         scene.add(sunLight);
         return sunLight;
@@ -68,26 +67,21 @@ export function setupResizeHandler(renderer, camera) {
 }
 
 export function updateShadowPosition(light, caster, height = 15, shadowSize = 20, angle = { x: 1, z: 1 }) {
-    // Normalize the angle vector
     const length = Math.sqrt(angle.x * angle.x + angle.z * angle.z);
     const nx = angle.x / length;
     const nz = angle.z / length;
 
-    // Position the light above the object at an angle
     light.position.set(
         caster.position.x + nx * height,
         caster.position.y + height,
         caster.position.z + nz * height
     );
 
-    // Aim the light at the object
     light.target.position.set(caster.position.x, caster.position.y, caster.position.z);
     light.target.updateMatrixWorld();
 
-    // Use shadowSize from CONFIG if available
     shadowSize = CONFIG.shadowSize || shadowSize;
 
-    // Adjust shadow camera
     light.shadow.camera.left = -shadowSize;
     light.shadow.camera.right = shadowSize;
     light.shadow.camera.top = shadowSize;
@@ -95,11 +89,11 @@ export function updateShadowPosition(light, caster, height = 15, shadowSize = 20
     light.shadow.camera.near = 0.5;
     light.shadow.camera.far = 50;
 
-    // High resolution
-    light.shadow.mapSize.width = Math.pow(2, 9)+1;
-    light.shadow.mapSize.height = Math.pow(2, 9)+1;
+    light.shadow.mapSize.width = 1024;
+    light.shadow.mapSize.height = 1024;
+    
+    light.shadow.bias = -0.001;
+    light.shadow.normalBias = 0.02;
 
     light.shadow.camera.updateProjectionMatrix();
 }
-
-

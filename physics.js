@@ -1,13 +1,207 @@
 import * as THREE from 'https://unpkg.com/three@0.181.0/build/three.module.js';
 
 /**
- * Represents a physics-enabled 3D object with collision detection and response.
- * Supports both spherical and box colliders with linear and angular motion.
- *
- * NOTE: This file focuses on fixing:
- *  - non-conserved momentum when one body is non-static
- *  - spheres penetrating floors/box faces when approaching edges or sides
- *  - jitter/teleportation by using proper closest-point sphere-box collision
+ * Triangle primitive for collision detection
+ */
+class Triangle {
+    constructor(v0, v1, v2, parent = null) {
+        this.v0 = v0.clone();
+        this.v1 = v1.clone();
+        this.v2 = v2.clone();
+        this.parent = parent;
+        this.updateProperties();
+    }
+    
+    updateProperties() {
+        this.edge1 = new THREE.Vector3().subVectors(this.v1, this.v0);
+        this.edge2 = new THREE.Vector3().subVectors(this.v2, this.v0);
+        this.normal = new THREE.Vector3().crossVectors(this.edge1, this.edge2).normalize();
+        this.centroid = new THREE.Vector3()
+            .add(this.v0).add(this.v1).add(this.v2)
+            .divideScalar(3);
+        this.aabb = this.computeAABB();
+    }
+    
+    computeAABB() {
+        const min = new THREE.Vector3(
+            Math.min(this.v0.x, this.v1.x, this.v2.x),
+            Math.min(this.v0.y, this.v1.y, this.v2.y),
+            Math.min(this.v0.z, this.v1.z, this.v2.z)
+        );
+        const max = new THREE.Vector3(
+            Math.max(this.v0.x, this.v1.x, this.v2.x),
+            Math.max(this.v0.y, this.v1.y, this.v2.y),
+            Math.max(this.v0.z, this.v1.z, this.v2.z)
+        );
+        return new AABB(min, max);
+    }
+    
+    closestPointToPoint(point) {
+        const ab = this.edge1;
+        const ac = this.edge2;
+        const ap = new THREE.Vector3().subVectors(point, this.v0);
+        
+        const d1 = ab.dot(ap);
+        const d2 = ac.dot(ap);
+        
+        if (d1 <= 0 && d2 <= 0) return this.v0.clone();
+        
+        const bp = new THREE.Vector3().subVectors(point, this.v1);
+        const d3 = ab.dot(bp);
+        const d4 = ac.dot(bp);
+        if (d3 >= 0 && d4 <= d3) return this.v1.clone();
+        
+        const vc = d1 * d4 - d3 * d2;
+        if (vc <= 0 && d1 >= 0 && d3 <= 0) {
+            const v = d1 / (d1 - d3);
+            return this.v0.clone().add(ab.clone().multiplyScalar(v));
+        }
+        
+        const cp = new THREE.Vector3().subVectors(point, this.v2);
+        const d5 = ab.dot(cp);
+        const d6 = ac.dot(cp);
+        if (d6 >= 0 && d5 <= d6) return this.v2.clone();
+        
+        const vb = d5 * d2 - d1 * d6;
+        if (vb <= 0 && d2 >= 0 && d6 <= 0) {
+            const w = d2 / (d2 - d6);
+            return this.v0.clone().add(ac.clone().multiplyScalar(w));
+        }
+        
+        const va = d3 * d6 - d5 * d4;
+        if (va <= 0 && (d4 - d3) >= 0 && (d5 - d6) >= 0) {
+            const w = (d4 - d3) / ((d4 - d3) + (d5 - d6));
+            return this.v1.clone().add(
+                new THREE.Vector3().subVectors(this.v2, this.v1).multiplyScalar(w)
+            );
+        }
+        
+        const denom = 1.0 / (va + vb + vc);
+        const v = vb * denom;
+        const w = vc * denom;
+        return this.v0.clone()
+            .add(ab.clone().multiplyScalar(v))
+            .add(ac.clone().multiplyScalar(w));
+    }
+}
+
+/**
+ * Axis-Aligned Bounding Box
+ */
+class AABB {
+    constructor(min, max) {
+        this.min = min.clone();
+        this.max = max.clone();
+        this.center = new THREE.Vector3().addVectors(min, max).multiplyScalar(0.5);
+    }
+    
+    expand(amount) {
+        this.min.addScalar(-amount);
+        this.max.addScalar(amount);
+        this.center = new THREE.Vector3().addVectors(this.min, this.max).multiplyScalar(0.5);
+    }
+    
+    intersectsSphere(center, radius) {
+        const closestPoint = new THREE.Vector3(
+            Math.max(this.min.x, Math.min(center.x, this.max.x)),
+            Math.max(this.min.y, Math.min(center.y, this.max.y)),
+            Math.max(this.min.z, Math.min(center.z, this.max.z))
+        );
+        const distanceSq = closestPoint.distanceToSquared(center);
+        return distanceSq <= radius * radius;
+    }
+    
+    static union(a, b) {
+        return new AABB(
+            new THREE.Vector3(
+                Math.min(a.min.x, b.min.x),
+                Math.min(a.min.y, b.min.y),
+                Math.min(a.min.z, b.min.z)
+            ),
+            new THREE.Vector3(
+                Math.max(a.max.x, b.max.x),
+                Math.max(a.max.y, b.max.y),
+                Math.max(a.max.z, b.max.z)
+            )
+        );
+    }
+}
+
+/**
+ * BVH Node
+ */
+class BVHNode {
+    constructor() {
+        this.aabb = null;
+        this.left = null;
+        this.right = null;
+        this.triangles = [];
+        this.isLeaf = false;
+    }
+}
+
+/**
+ * Bounding Volume Hierarchy
+ */
+class BVH {
+    constructor(triangles) {
+        this.root = this.build(triangles, 0);
+    }
+    
+    build(triangles, depth) {
+        const node = new BVHNode();
+        
+        if (triangles.length === 0) return node;
+        
+        let aabb = triangles[0].aabb;
+        for (let i = 1; i < triangles.length; i++) {
+            aabb = AABB.union(aabb, triangles[i].aabb);
+        }
+        node.aabb = aabb;
+        
+        if (triangles.length <= 4 || depth > 20) {
+            node.isLeaf = true;
+            node.triangles = triangles;
+            return node;
+        }
+        
+        const extent = new THREE.Vector3().subVectors(aabb.max, aabb.min);
+        let axis = 0;
+        if (extent.y > extent.x && extent.y > extent.z) axis = 1;
+        else if (extent.z > extent.x && extent.z > extent.y) axis = 2;
+        
+        triangles.sort((a, b) => {
+            if (axis === 0) return a.centroid.x - b.centroid.x;
+            if (axis === 1) return a.centroid.y - b.centroid.y;
+            return a.centroid.z - b.centroid.z;
+        });
+        
+        const mid = Math.floor(triangles.length / 2);
+        node.left = this.build(triangles.slice(0, mid), depth + 1);
+        node.right = this.build(triangles.slice(mid), depth + 1);
+        
+        return node;
+    }
+    
+    querySphere(node, center, radius, results = []) {
+        if (!node || !node.aabb) return results;
+        
+        if (!node.aabb.intersectsSphere(center, radius)) return results;
+        
+        if (node.isLeaf) {
+            results.push(...node.triangles);
+            return results;
+        }
+        
+        if (node.left) this.querySphere(node.left, center, radius, results);
+        if (node.right) this.querySphere(node.right, center, radius, results);
+        
+        return results;
+    }
+}
+
+/**
+ * Physics Object
  */
 class PhysicsObject {
     constructor(geometry, material, mass = 1, position = new THREE.Vector3(), velocity = new THREE.Vector3()) {
@@ -17,443 +211,187 @@ class PhysicsObject {
         this.velocity = velocity.clone();
         this.acceleration = new THREE.Vector3(0, 0, 0);
         this.isStatic = mass === 0;
-
-        // Spherical collider properties
+        
         this.radius = 1;
-
-        // Angular physics properties
+        
         this.angularVelocity = new THREE.Vector3(0, 0, 0);
         this.angularAcceleration = new THREE.Vector3(0, 0, 0);
-        // For spheres this is fine; if geometry isn't sphere, momentOfInertia should be set externally
         this.momentOfInertia = (this.mass > 0) ? (2 / 5) * this.mass * this.radius * this.radius : Infinity;
-
-        // Material properties
-        this.normal = new THREE.Vector3(0, 1, 0);
-        this.restitution = 0.7;
-        this.friction = 0.3;
-
-        // Box collider dimensions (if object is used as a box)
-        this.width = 1;
-        this.height = 1;
-        this.depth = 1;
-
+        
+        this.restitution = 0;
+        this.friction = 0.02; // Reduced from 1 - much lower rolling resistance
+        
+        this.triangles = [];
+        this.bvh = null;
+        this.bvhBuilt = false;
+        
         this.mesh.position.copy(this.position);
     }
-
-    // Rotation helpers (unchanged)
-    rotate(x = 0, y = 0, z = 0) {
-        this.mesh.rotation.set(x, y, z);
-        this.updateNormal();
-        return this;
+    
+    buildTriangleMesh() {
+        this.triangles = [];
+        
+        const geometry = this.mesh.geometry;
+        const positionAttribute = geometry.attributes.position;
+        const index = geometry.index;
+        
+        if (!positionAttribute) return;
+        
+        this.mesh.updateMatrixWorld(true);
+        const worldMatrix = this.mesh.matrixWorld;
+        
+        if (index) {
+            for (let i = 0; i < index.count; i += 3) {
+                const i0 = index.getX(i);
+                const i1 = index.getX(i + 1);
+                const i2 = index.getX(i + 2);
+                
+                const v0 = new THREE.Vector3().fromBufferAttribute(positionAttribute, i0).applyMatrix4(worldMatrix);
+                const v1 = new THREE.Vector3().fromBufferAttribute(positionAttribute, i1).applyMatrix4(worldMatrix);
+                const v2 = new THREE.Vector3().fromBufferAttribute(positionAttribute, i2).applyMatrix4(worldMatrix);
+                
+                this.triangles.push(new Triangle(v0, v1, v2, this));
+            }
+        } else {
+            for (let i = 0; i < positionAttribute.count; i += 3) {
+                const v0 = new THREE.Vector3().fromBufferAttribute(positionAttribute, i).applyMatrix4(worldMatrix);
+                const v1 = new THREE.Vector3().fromBufferAttribute(positionAttribute, i + 1).applyMatrix4(worldMatrix);
+                const v2 = new THREE.Vector3().fromBufferAttribute(positionAttribute, i + 2).applyMatrix4(worldMatrix);
+                
+                this.triangles.push(new Triangle(v0, v1, v2, this));
+            }
+        }
+        
+        if (this.isStatic && this.triangles.length > 0 && !this.bvhBuilt) {
+            this.bvh = new BVH(this.triangles);
+            this.bvhBuilt = true;
+        }
     }
-    setRotation(euler) {
-        if (euler instanceof THREE.Euler) this.mesh.rotation.copy(euler);
-        else this.mesh.rotation.set(euler.x || 0, euler.y || 0, euler.z || 0);
-        this.updateNormal();
-        return this;
-    }
-    rotateX(angle) { this.mesh.rotation.x = angle; this.updateNormal(); return this; }
-    rotateY(angle) { this.mesh.rotation.y = angle; this.updateNormal(); return this; }
-    rotateZ(angle) { this.mesh.rotation.z = angle; this.updateNormal(); return this; }
-    updateNormal() {
-        this.normal.set(0, 1, 0);
-        this.normal.applyEuler(this.mesh.rotation).normalize();
-    }
-
-    // Physics update
+    
     update(dt) {
         if (this.isStatic) return;
-
-        // integrate linear motion
+        
         this.velocity.addScaledVector(this.acceleration, dt);
         this.position.addScaledVector(this.velocity, dt);
         this.mesh.position.copy(this.position);
-
-        // integrate angular motion
+        
         this.angularVelocity.addScaledVector(this.angularAcceleration, dt);
         const angSpeed = this.angularVelocity.length();
         if (angSpeed > 1e-6) {
             const axis = this.angularVelocity.clone().normalize();
             this.mesh.rotateOnWorldAxis(axis, angSpeed * dt);
         }
-
-        // reset frame forces
+        
         this.acceleration.set(0, 0, 0);
         this.angularAcceleration.set(0, 0, 0);
     }
-
+    
     applyForce(force) {
         if (this.isStatic) return;
         this.acceleration.addScaledVector(force, 1 / this.mass);
     }
+    
     applyTorque(torque) {
         if (this.isStatic) return;
-        // torque -> angular acceleration: alpha = torque / I
         if (this.momentOfInertia !== Infinity && this.momentOfInertia !== 0) {
             this.angularAcceleration.addScaledVector(torque, 1 / this.momentOfInertia);
         }
     }
-
-    // ------------------ Sphere-Sphere collision (fixed to handle static masses and angular inertia) ------------------
-    checkCollision(other) {
-        const distance = this.position.distanceTo(other.position);
-        return distance < (this.radius + other.radius);
-    }
-
-    resolveCollision(other) {
-        if (this.isStatic && other.isStatic) return;
-
-        const normal = new THREE.Vector3().subVectors(this.position, other.position);
-        const dist = normal.length();
-        if (dist === 0) {
-            // avoid singularity: nudge along arbitrary axis (use world up rotated by one of the objects)
-            normal.set(0, 1, 0).applyEuler(this.mesh.rotation);
-            dist = normal.length();
-            if (dist === 0) return;
-        }
-        normal.divideScalar(dist); // normalize
-
-        // position correction (baumgarte style) with slop to avoid teleport
-        const penetration = (this.radius + other.radius) - dist;
-        const slop = 0.001;
-        const percent = 0.8; // push 80% of penetration
-        if (penetration > slop) {
-            const invMassA = this.isStatic ? 0 : 1 / this.mass;
-            const invMassB = other.isStatic ? 0 : 1 / other.mass;
-            const invSum = invMassA + invMassB;
-            if (invSum > 0) {
-                const correction = normal.clone().multiplyScalar((penetration - slop) / invSum * percent);
-                if (!this.isStatic) this.position.addScaledVector(correction, invMassA);
-                if (!other.isStatic) other.position.addScaledVector(correction, -invMassB);
-                this.mesh.position.copy(this.position);
-                other.mesh.position.copy(other.position);
-            }
-        }
-
-        // relative velocity at contact
-        const ra = normal.clone().multiplyScalar(-this.radius);
-        const rb = normal.clone().multiplyScalar(other.radius);
-        const velA = this.velocity.clone().add(new THREE.Vector3().crossVectors(this.angularVelocity, ra));
-        const velB = other.velocity.clone().add(new THREE.Vector3().crossVectors(other.angularVelocity, rb));
-        const relativeVelocity = velA.clone().sub(velB);
-
-        const velAlongNormal = relativeVelocity.dot(normal);
-        // If velocities are separating, still we've already corrected positions; no impulse needed
-        if (velAlongNormal > 0) return;
-
-        const restitution = Math.min(this.restitution, other.restitution);
-
-        const invMassA = this.isStatic ? 0 : 1 / this.mass;
-        const invMassB = other.isStatic ? 0 : 1 / other.mass;
-
-        // rotational contribution to effective mass
-        const raCrossN = new THREE.Vector3().crossVectors(ra, normal);
-        const rbCrossN = new THREE.Vector3().crossVectors(rb, normal);
-        const invIA = (this.momentOfInertia === Infinity || this.momentOfInertia === 0) ? 0 : 1 / this.momentOfInertia;
-        const invIB = (other.momentOfInertia === Infinity || other.momentOfInertia === 0) ? 0 : 1 / other.momentOfInertia;
-        const angularTerm = (raCrossN.lengthSq() * invIA) + (rbCrossN.lengthSq() * invIB);
-
-        const invEffectiveMass = invMassA + invMassB + angularTerm;
-        if (invEffectiveMass === 0) return;
-
-        const j = -(1 + restitution) * velAlongNormal / invEffectiveMass;
-        const impulse = normal.clone().multiplyScalar(j);
-
-        if (!this.isStatic) {
-            this.velocity.addScaledVector(impulse, invMassA);
-            const dOmegaA = new THREE.Vector3().crossVectors(ra, impulse).multiplyScalar(invIA);
-            this.angularVelocity.add(dOmegaA);
-        }
-        if (!other.isStatic) {
-            other.velocity.addScaledVector(impulse, -invMassB);
-            const dOmegaB = new THREE.Vector3().crossVectors(rb, impulse.clone().negate()).multiplyScalar(invIB);
-            other.angularVelocity.add(dOmegaB);
-        }
-
-        // friction (tangent) — Coulomb friction limited by mu * j
-        const tangent = relativeVelocity.clone().sub(normal.clone().multiplyScalar(relativeVelocity.dot(normal)));
-        const tLen = tangent.length();
-        if (tLen > 1e-6) {
-            tangent.divideScalar(tLen);
-            const raCrossT = new THREE.Vector3().crossVectors(ra, tangent);
-            const rbCrossT = new THREE.Vector3().crossVectors(rb, tangent);
-            const angularTermT = (raCrossT.lengthSq() * invIA) + (rbCrossT.lengthSq() * invIB);
-            const invEffMassT = invMassA + invMassB + angularTermT;
-            const jt = -relativeVelocity.dot(tangent) / (invEffMassT || 1);
-            const maxFriction = Math.min(this.friction, other.friction) * j;
-            const frictionImpulseScalar = THREE.MathUtils.clamp(jt, -Math.abs(maxFriction), Math.abs(maxFriction));
-            const frictionImpulse = tangent.clone().multiplyScalar(frictionImpulseScalar);
-
-            if (!this.isStatic) {
-                this.velocity.addScaledVector(frictionImpulse, invMassA);
-                this.angularVelocity.add(new THREE.Vector3().crossVectors(ra, frictionImpulse).multiplyScalar(invIA));
-            }
-            if (!other.isStatic) {
-                other.velocity.addScaledVector(frictionImpulse, -invMassB);
-                other.angularVelocity.add(new THREE.Vector3().crossVectors(rb, frictionImpulse.clone().negate()).multiplyScalar(invIB));
-            }
-        }
-    }
-
-    // ------------------ Box utility (unchanged) ------------------
-    getBoxFaces() {
-        const faces = [];
-        const localNormals = [
-            new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, -1, 0),
-            new THREE.Vector3(1, 0, 0), new THREE.Vector3(-1, 0, 0),
-            new THREE.Vector3(0, 0, 1), new THREE.Vector3(0, 0, -1)
-        ];
-        const localOffsets = [
-            new THREE.Vector3(0, this.height / 2, 0), new THREE.Vector3(0, -this.height / 2, 0),
-            new THREE.Vector3(this.width / 2, 0, 0), new THREE.Vector3(-this.width / 2, 0, 0),
-            new THREE.Vector3(0, 0, this.depth / 2), new THREE.Vector3(0, 0, -this.depth / 2)
-        ];
-        const dimensions = [
-            { w: this.width, h: this.depth }, { w: this.width, h: this.depth },
-            { w: this.depth, h: this.height }, { w: this.depth, h: this.height },
-            { w: this.width, h: this.height }, { w: this.width, h: this.height }
-        ];
-        for (let i = 0; i < 6; i++) {
-            const worldNormal = localNormals[i].clone().applyEuler(this.mesh.rotation).normalize();
-            const worldOffset = localOffsets[i].clone().applyEuler(this.mesh.rotation);
-            const worldPosition = this.position.clone().add(worldOffset);
-            faces.push({
-                normal: worldNormal,
-                position: worldPosition,
-                width: dimensions[i].w,
-                height: dimensions[i].h,
-                index: i
-            });
-        }
-        return faces;
-    }
-
-    isPointOnFace(point, face) {
-        // Convert point into face local coordinates properly via face basis
-        const localPos = point.clone().sub(face.position);
-        const up = new THREE.Vector3(0, 1, 0);
-        let right = new THREE.Vector3().crossVectors(face.normal, up);
-        if (right.length() < 0.001) right = new THREE.Vector3().crossVectors(face.normal, new THREE.Vector3(1, 0, 0));
-        right.normalize();
-        const forward = new THREE.Vector3().crossVectors(right, face.normal).normalize();
-        const x = localPos.dot(right);
-        const y = localPos.dot(forward);
-        return Math.abs(x) <= face.width / 2 + 1e-6 && Math.abs(y) <= face.height / 2 + 1e-6;
-    }
-
-    // ------------------ Plane bounce (kept but made safer) ------------------
-    bounceOffPlane(planePosition, planeNormal, planeRestitution = 0.7, dt = 0.016) {
-        if (this.isStatic) return;
-
-        const toSphere = new THREE.Vector3().subVectors(this.position, planePosition);
-        const distanceToPlane = toSphere.dot(planeNormal);
-
-        if (distanceToPlane >= this.radius) return;
-
-        // Projected point might be outside box face; caller must ensure plane is valid contact
-        const penetration = this.radius - distanceToPlane;
-        this.position.addScaledVector(planeNormal, penetration);
-        this.mesh.position.copy(this.position);
-
-        const vn = this.velocity.dot(planeNormal);
-        // If moving away after position correction, skip impulse
-        if (vn >= 0) return;
-
-        const vNormal = planeNormal.clone().multiplyScalar(vn);
-        const vTangent = this.velocity.clone().sub(vNormal);
-
-        const e = Math.min(this.restitution, planeRestitution);
-        const m = this.mass;
-
-        // rolling/slip friction handling (simplified, robust)
-        const vRoll = new THREE.Vector3().crossVectors(this.angularVelocity, planeNormal).multiplyScalar(this.radius);
-        const vSlip = vTangent.clone().sub(vRoll);
-        const slipSpeed = vSlip.length();
-        const mu = this.friction;
-
-        // normal bounce
-        const newVn = -e * vn;
-        this.velocity.copy(planeNormal.clone().multiplyScalar(newVn).add(vTangent));
-
-        // friction impulse approximation (apply small tangential reduction)
-        if (slipSpeed > 1e-4 && mu > 1e-6) {
-            const slipDir = vSlip.clone().normalize();
-            const j_noslip = m * slipSpeed / (1.0 + (m * this.radius * this.radius) / this.momentOfInertia);
-            const j_normal = m * Math.abs(vn) * (1 + e);
-            const j_max = mu * j_normal;
-            const j = Math.min(j_noslip, j_max);
-            this.velocity.addScaledVector(slipDir, -j / m);
-            // angular update
-            const r = planeNormal.clone().multiplyScalar(-this.radius);
-            const J = slipDir.clone().multiplyScalar(-j);
-            const deltaOmega = new THREE.Vector3().crossVectors(r, J).divideScalar(this.momentOfInertia);
-            this.angularVelocity.add(deltaOmega);
-        }
-    }
-
-    // ------------------ Sphere vs Box collision using closest-point (replaces bounceBox) ------------------
-    /**
-     * Robust sphere vs box collision resolution.
-     * This should be used when the box is static (floor/wall) or dynamic.
-     * It computes closest point on box to sphere center in box local-space, resolves penetration,
-     * computes impulse (including angular effects for spheres and boxes if they have momentOfInertia).
-     * @param {PhysicsObject} sphere - the sphere object (this method called on box)
-     * @param {number} [dt=0.016]
-     */
-    collideSphereBox(sphere, dt = 0.016) {
-        // compute box orientation quaternion and its inverse
-        const boxQ = this.mesh.quaternion.clone();
-        const invBoxQ = boxQ.clone().conjugate();
-
-        // sphere position in box local space
-        const localSpherePos = sphere.position.clone().sub(this.position).applyQuaternion(invBoxQ);
-
-        const hx = this.width / 2;
-        const hy = this.height / 2;
-        const hz = this.depth / 2;
-
-        // closest point in local space
-        const closestLocal = new THREE.Vector3(
-            THREE.MathUtils.clamp(localSpherePos.x, -hx, hx),
-            THREE.MathUtils.clamp(localSpherePos.y, -hy, hy),
-            THREE.MathUtils.clamp(localSpherePos.z, -hz, hz)
+    
+    collideWithTriangleMesh(triangleMesh, dt) {
+        if (!triangleMesh.bvh || triangleMesh.triangles.length === 0) return;
+        
+        const candidateTriangles = triangleMesh.bvh.querySphere(
+            triangleMesh.bvh.root,
+            this.position,
+            this.radius * 1.5
         );
-
-        // world space closest point
-        const closestWorld = closestLocal.clone().applyQuaternion(boxQ).add(this.position);
-
-        // vector from closest point to sphere center
-        const diff = sphere.position.clone().sub(closestWorld);
-        const dist = diff.length();
-        const radius = sphere.radius;
-
-        if (dist >= radius || dist === 0 && (closestLocal.x === localSpherePos.x && closestLocal.y === localSpherePos.y && closestLocal.z === localSpherePos.z)) {
-            // No penetration OR exactly inside but closest point equals sphere center projection (corner case handled below).
-            // If dist === 0 and closest point equals sphere center projection, we will pick a face normal instead below.
-            if (dist >= radius) return;
-        }
-
-        // Choose contact normal robustly
-        let normal;
-        if (dist > 1e-6) {
-            normal = diff.clone().divideScalar(dist);
-        } else {
-            // sphere center exactly on closest point (rare). Choose a face normal that points outward.
-            // Determine which axis of localSpherePos is outside the box extents most and use that.
-            const dx = Math.abs(localSpherePos.x) - hx;
-            const dy = Math.abs(localSpherePos.y) - hy;
-            const dz = Math.abs(localSpherePos.z) - hz;
-            if (dx >= dy && dx >= dz) normal = new THREE.Vector3(Math.sign(localSpherePos.x), 0, 0);
-            else if (dy >= dx && dy >= dz) normal = new THREE.Vector3(0, Math.sign(localSpherePos.y), 0);
-            else normal = new THREE.Vector3(0, 0, Math.sign(localSpherePos.z));
-            // rotate normal to world space
-            normal.applyQuaternion(boxQ).normalize();
-        }
-
-        const penetration = radius - dist;
-        if (penetration <= 0) return;
-
-        // position correction using inverse mass weighting
-        const invMassA = sphere.isStatic ? 0 : 1 / sphere.mass;
-        const invMassB = this.isStatic ? 0 : 1 / this.mass;
-        const invSum = invMassA + invMassB;
-        if (invSum === 0) return;
-        const percent = 0.8;
-        const slop = 0.001;
-        const correctionMagnitude = Math.max(penetration - slop, 0) / invSum * percent;
-        const correction = normal.clone().multiplyScalar(correctionMagnitude);
-        if (!sphere.isStatic) sphere.position.addScaledVector(correction, invMassA);
-        if (!this.isStatic) this.position.addScaledVector(correction, -invMassB);
-        sphere.mesh.position.copy(sphere.position);
-        this.mesh.position.copy(this.position);
-
-        // contact point in world space relative to centers
-        const contactPoint = closestWorld.clone();
-        const ra = contactPoint.clone().sub(sphere.position);
-        const rb = contactPoint.clone().sub(this.position);
-
-        // velocities at contact (include angular)
-        const velA = sphere.velocity.clone().add(new THREE.Vector3().crossVectors(sphere.angularVelocity, ra));
-        const velB = this.velocity ? this.velocity.clone().add(new THREE.Vector3().crossVectors(this.angularVelocity, rb)) : new THREE.Vector3();
-        const relativeVel = velA.clone().sub(velB);
-
-        const velAlongNormal = relativeVel.dot(normal);
-
-        // restitution check - only apply impulse if approaching (or always apply small bounce if penetration)
-        const e = Math.min(sphere.restitution, this.restitution);
-
-        // compute effective mass including rotational term
-        const invIA = (sphere.momentOfInertia === Infinity || sphere.momentOfInertia === 0) ? 0 : 1 / sphere.momentOfInertia;
-        const invIB = (this.momentOfInertia === Infinity || this.momentOfInertia === 0) ? 0 : 1 / this.momentOfInertia;
-        const raCrossN = new THREE.Vector3().crossVectors(ra, normal);
-        const rbCrossN = new THREE.Vector3().crossVectors(rb, normal);
-        const angularTerm = raCrossN.lengthSq() * invIA + rbCrossN.lengthSq() * invIB;
-        const invEffectiveMass = invMassA + invMassB + angularTerm;
-        if (invEffectiveMass === 0) return;
-
-        // If separating strongly, skip impulse but penetration was corrected above
-        if (velAlongNormal > 0 && penetration < slop) return;
-
-        const j = -(1 + e) * velAlongNormal / invEffectiveMass;
-        const impulse = normal.clone().multiplyScalar(j);
-
-        if (!sphere.isStatic) {
-            sphere.velocity.addScaledVector(impulse, invMassA);
-            sphere.angularVelocity.add(new THREE.Vector3().crossVectors(ra, impulse).multiplyScalar(invIA));
-        }
-        if (!this.isStatic) {
-            this.velocity.addScaledVector(impulse, -invMassB);
-            this.angularVelocity.add(new THREE.Vector3().crossVectors(rb, impulse.clone().negate()).multiplyScalar(invIB));
-        }
-
-        // tangential (friction) impulse
-        const tangent = relativeVel.clone().sub(normal.clone().multiplyScalar(relativeVel.dot(normal)));
-        const tLen = tangent.length();
-        if (tLen > 1e-6) {
-            tangent.divideScalar(tLen);
-            const raCrossT = new THREE.Vector3().crossVectors(ra, tangent);
-            const rbCrossT = new THREE.Vector3().crossVectors(rb, tangent);
-            const angularTermT = raCrossT.lengthSq() * invIA + rbCrossT.lengthSq() * invIB;
-            const invEffMassT = invMassA + invMassB + angularTermT || 1;
-            const jt = -relativeVel.dot(tangent) / invEffMassT;
-            const mu = Math.min(sphere.friction, this.friction);
-            const maxFriction = Math.abs(j) * mu;
-            const frictionScalar = THREE.MathUtils.clamp(jt, -maxFriction, maxFriction);
-            const frictionImpulse = tangent.clone().multiplyScalar(frictionScalar);
-
-            if (!sphere.isStatic) {
-                sphere.velocity.addScaledVector(frictionImpulse, invMassA);
-                sphere.angularVelocity.add(new THREE.Vector3().crossVectors(ra, frictionImpulse).multiplyScalar(invIA));
-            }
-            if (!this.isStatic) {
-                this.velocity.addScaledVector(frictionImpulse, -invMassB);
-                this.angularVelocity.add(new THREE.Vector3().crossVectors(rb, frictionImpulse.clone().negate()).multiplyScalar(invIB));
+        
+        if (candidateTriangles.length === 0) return;
+        
+        const contacts = [];
+        
+        for (const tri of candidateTriangles) {
+            const closest = tri.closestPointToPoint(this.position);
+            const dist = this.position.distanceTo(closest);
+            
+            if (dist < this.radius + 0.01) {
+                const penetration = this.radius - dist;
+                let normal;
+                
+                if (dist > 1e-6) {
+                    normal = new THREE.Vector3().subVectors(this.position, closest).normalize();
+                } else {
+                    normal = tri.normal.clone();
+                }
+                
+                contacts.push({
+                    point: closest,
+                    normal: normal,
+                    penetration: penetration,
+                    triangle: tri
+                });
             }
         }
-    }
-
-    // Old bounceBox wrapper kept for compatibility but now forwards to robust method
-    bounceBox(sphere, dt = 0.016) {
-        // Prefer using collideSphereBox which handles edge/corner cases.
-        this.collideSphereBox(sphere, dt);
+        
+        if (contacts.length === 0) return;
+        
+        contacts.sort((a, b) => b.penetration - a.penetration);
+        const contact = contacts[0];
+        
+        // Position correction - minimize energy loss
+        const slop = 0.0001; // Smaller slop
+        if (contact.penetration > slop) {
+            const correction = contact.penetration; // Don't subtract slop
+            this.position.addScaledVector(contact.normal, correction);
+            this.mesh.position.copy(this.position);
+        }
+        
+        const velAlongNormal = this.velocity.dot(contact.normal);
+        
+        // Only apply friction if actually sliding significantly
+        const slidingThreshold = 0.01;
+        
+        if (velAlongNormal < -slidingThreshold) {
+            // Moving into surface - apply restitution and friction
+            const vNormal = contact.normal.clone().multiplyScalar(velAlongNormal);
+            const vTangent = this.velocity.clone().sub(vNormal);
+            
+            const restitution = Math.min(this.restitution, triangleMesh.restitution);
+            const newVelNormal = -velAlongNormal * restitution;
+            
+            // Apply minimal rolling friction
+            const friction = Math.min(this.friction, triangleMesh.friction);
+            const vRoll = new THREE.Vector3().crossVectors(this.angularVelocity, contact.normal).multiplyScalar(this.radius);
+            const vSlip = vTangent.clone().sub(vRoll);
+            const slipSpeed = vSlip.length();
+            
+            if (slipSpeed > 1e-4) {
+                const slipDir = vSlip.clone().normalize();
+                const normalImpulse = Math.abs(velAlongNormal) * (1 + restitution);
+                const maxFriction = friction * normalImpulse;
+                
+                const inertiaFactor = 1.0 + (this.radius * this.radius) / (this.momentOfInertia / this.mass);
+                const frictionImpulse = Math.min(slipSpeed / inertiaFactor, maxFriction);
+                
+                vTangent.addScaledVector(slipDir, -frictionImpulse);
+                
+                const torque = new THREE.Vector3().crossVectors(
+                    contact.normal.clone().multiplyScalar(-this.radius),
+                    slipDir.clone().multiplyScalar(-frictionImpulse * this.mass)
+                );
+                this.angularVelocity.add(torque.divideScalar(this.momentOfInertia));
+            }
+            
+            this.velocity.copy(contact.normal.clone().multiplyScalar(newVelNormal).add(vTangent));
+            
+        } else if (Math.abs(velAlongNormal) < 0.05 && contact.penetration < 0.05) {
+            // Resting contact - only remove normal component, NO damping
+            const normalVel = contact.normal.clone().multiplyScalar(velAlongNormal);
+            this.velocity.sub(normalVel);
+            // NO damping here - energy conservation!
+        }
     }
 }
 
-// ------------------ CollisionHelper (unchanged apart from using new method names) ------------------
-class CollisionHelper {
-    static isOnBox(spherePos, boxObject, sphereRadius = 1) {
-        const invQ = boxObject.mesh.quaternion.clone().conjugate();
-        const local = spherePos.clone().sub(boxObject.position).applyQuaternion(invQ);
-        const hx = boxObject.width / 2, hy = boxObject.height / 2, hz = boxObject.depth / 2;
-        const clamped = new THREE.Vector3(
-            THREE.MathUtils.clamp(local.x, -hx, hx),
-            THREE.MathUtils.clamp(local.y, -hy, hy),
-            THREE.MathUtils.clamp(local.z, -hz, hz)
-        );
-        const closestWorld = clamped.applyQuaternion(boxObject.mesh.quaternion).add(boxObject.position);
-        const dist = closestWorld.distanceTo(spherePos);
-        return dist <= sphereRadius + 1e-6;
-    }
-}
-
-export { PhysicsObject, CollisionHelper };
+export { PhysicsObject, Triangle, AABB, BVH, BVHNode };

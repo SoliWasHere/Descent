@@ -1,9 +1,6 @@
 export const CONFIG = {
-    floorWidth: 12,
-    floorHeight: 0.8,
-    floorDepth: 12,
-    floorFriction: 1,
-    floorRestitution: 0.5,
+    floorFriction: 0,
+    floorRestitution: 1,
     numSpheres: 1,
     sphereStartY: 50,
     gravity: -9.81,
