@@ -20,26 +20,49 @@ export class GameLogic {
 
         if (playerX > this.floorCounts * this.floorWidth) {
             this.floorCounts++;
+            if (! (this.floorCounts%10 == 0) ) {
 
-            // Convert degrees to radians
-            const rad = this.degrees * (Math.PI / 180);
+                // Convert degrees to radians
+                const rad = this.degrees * (Math.PI / 180);
 
-            // Calculate y offset so the next floor connects seamlessly
-            const offset = -Math.tan(rad) * this.floorWidth;
-            this.displace += offset;
-            const rotation = this.degrees * (Math.PI / 180);
+                // Calculate y offset so the next floor connects seamlessly
+                const offset = -Math.tan(rad) * this.floorWidth;
+                this.displace += offset;
+                const rotation = this.degrees * (Math.PI / 180);
 
-this.floorManager.createFloor(
-    this.floorCounts * this.floorWidth, // x
-    this.displace,                       // y
-    0,                                   // z
-    this.floorWidth+0.5,                     // width
-    1,                                   // height
-    10,                                  // depth
-    0,                                   // rotationX
-    0,                                   // rotationY
-    -rotation + 0.00                   // rotationZ (example)
-);
+                this.floorManager.createFloor(
+                    this.floorCounts * this.floorWidth, // x
+                    this.displace,                       // y
+                    0,                                   // z
+                    this.floorWidth+0.155,                     // width
+                    1,                                   // height
+                    10,                                  // depth
+                    0,                                   // rotationX
+                    0,                                   // rotationY
+                    -rotation + 0.00                   // rotationZ (example)
+                );
+            } else {
+                // Convert degrees to radians
+                const rad = this.degrees * (Math.PI / 180);
+
+                // Calculate y offset so the next floor connects seamlessly
+                
+                const offset = -Math.tan(rad) * this.floorWidth;
+                const rotation = 40 * (Math.PI / 180);
+
+                this.floorManager.createFloor(
+                    this.floorCounts * this.floorWidth, // x
+                    this.displace,                       // y
+                    0,                                   // z
+                    this.floorWidth+0.155,                     // width
+                    1,                                   // height
+                    10,                                  // depth
+                    0,                                   // rotationX
+                    0,                                   // rotationY
+                    rotation + 0.00                   // rotationZ (example)
+                );
+                this.displace += offset;
+            }
         }
     }
 }

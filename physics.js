@@ -219,7 +219,7 @@ class PhysicsObject {
         this.momentOfInertia = (this.mass > 0) ? (2 / 5) * this.mass * this.radius * this.radius : Infinity;
         
         this.restitution = 0;
-        this.friction = 0.02; // Reduced from 1 - much lower rolling resistance
+        this.friction = 0.00; // Reduced from 1 - much lower rolling resistance
         
         this.triangles = [];
         this.bvh = null;

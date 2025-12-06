@@ -3,7 +3,7 @@ export const CONFIG = {
     floorRestitution: 1,
     numSpheres: 1,
     sphereStartY: 50,
-    gravity: -9.81,
+    gravity: -20,
     forceMagnitude: 1000,
     cameraShiftSpeed: 20,
     floorSpawnInterval: 1000,
