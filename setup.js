@@ -32,10 +32,11 @@ export class Setup {
         }
         this.sphereManager.handleSphereSphereCollisions();
 
-        // Update camera
+        // Update camera with occlusion detection (pass floors array)
         this.cameraController.followTarget(
             mainSphere.position,
-            this.inputHandler.cameraDisplace
+            this.inputHandler.cameraDisplace,
+            this.floorManager.floors  // Pass floors for occlusion checking
         );
 
         // Update shadow position to follow main sphere

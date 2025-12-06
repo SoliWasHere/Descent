@@ -37,6 +37,9 @@ export function setupLighting(scene) {
         const sunLight = new THREE.DirectionalLight(0xffffff, 4);
         sunLight.position.set(50, 100, 50);
         sunLight.castShadow = true;
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 2);
+        scene.add(ambientLight);
         
         const shadowSize = CONFIG.shadowSize;
         sunLight.shadow.camera.left = -shadowSize;

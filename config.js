@@ -1,5 +1,5 @@
 export const CONFIG = {
-    floorFriction: 0,
+    floorFriction: 1,
     floorRestitution: 1,
     numSpheres: 1,
     sphereStartY: 50,
