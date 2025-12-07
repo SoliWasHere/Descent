@@ -82,6 +82,7 @@ function startGame() {
 			lastTime = currentTime; // store last valid time
 			gameLogic.update();
 			game.update(currentTime);
+			GLOBALS.time = currentTime;
 		}
 
 		postProcessing.render(scene, camera, time);

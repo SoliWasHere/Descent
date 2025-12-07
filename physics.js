@@ -1,30 +1,5 @@
 import * as THREE from 'https://unpkg.com/three@0.181.0/build/three.module.js';
 
-// Vector pool to reduce garbage collection
-class VectorPool {
-    constructor(size = 100) {
-        this.pool = [];
-        for (let i = 0; i < size; i++) {
-            this.pool.push(new THREE.Vector3());
-        }
-        this.index = 0;
-    }
-    
-    get() {
-        if (this.index >= this.pool.length) {
-            // Pool exhausted, create new (rare)
-            return new THREE.Vector3();
-        }
-        return this.pool[this.index++];
-    }
-    
-    reset() {
-        this.index = 0;
-    }
-}
-
-const vectorPool = new VectorPool(200);
-
 /**
  * Triangle primitive for collision detection
  */
@@ -213,13 +188,11 @@ class BVH {
         const stack = [{ node, distSq: 0 }];
         
         while (stack.length > 0) {
-            // Sort by distance (closest first)
             stack.sort((a, b) => a.distSq - b.distSq);
             const { node: currentNode, distSq } = stack.pop();
             
             if (!currentNode || !currentNode.aabb) continue;
             
-            // Early exit if we have enough results and they're all closer
             if (results.length >= maxResults && distSq > radius * radius) {
                 break;
             }
@@ -229,7 +202,6 @@ class BVH {
             if (currentNode.isLeaf) {
                 results.push(...currentNode.triangles);
                 if (results.length >= maxResults * 2) {
-                    // Too many results, filter by distance
                     results.sort((a, b) => {
                         return a.centroid.distanceToSquared(center) - 
                             b.centroid.distanceToSquared(center);
@@ -253,7 +225,7 @@ class BVH {
 }
 
 /**
- * Physics Object
+ * Physics Object - OPTIMIZED
  */
 class PhysicsObject {
     constructor(geometry, material, mass = 1, position = new THREE.Vector3(), velocity = new THREE.Vector3()) {
@@ -271,15 +243,14 @@ class PhysicsObject {
         this.momentOfInertia = (this.mass > 0) ? (2 / 5) * this.mass * this.radius * this.radius : Infinity;
         
         this.restitution = 0;
-        this.friction = 0.00; // Reduced from 1 - much lower rolling resistance
+        this.friction = 0.00;
         
         this.triangles = [];
         this.bvh = null;
         this.bvhBuilt = false;
         
-        // Storage for first and last plane points
-        this.firstPlane = null;
-        this.lastPlane = null;
+        // OPTIMIZATION: Cache world matrix for static objects
+        this.cachedWorldMatrix = null;
         
         this.mesh.position.copy(this.position);
     }
@@ -293,8 +264,19 @@ class PhysicsObject {
         
         if (!positionAttribute) return;
         
-        this.mesh.updateMatrixWorld(true);
-        const worldMatrix = this.mesh.matrixWorld;
+        // OPTIMIZATION: Use cached matrix for static objects
+        let worldMatrix;
+        if (this.isStatic && this.cachedWorldMatrix) {
+            worldMatrix = this.cachedWorldMatrix;
+        } else {
+            this.mesh.updateMatrixWorld(true);
+            worldMatrix = this.mesh.matrixWorld;
+            
+            // Cache for static objects
+            if (this.isStatic) {
+                this.cachedWorldMatrix = worldMatrix.clone();
+            }
+        }
         
         if (index) {
             for (let i = 0; i < index.count; i += 3) {
@@ -329,6 +311,8 @@ class PhysicsObject {
         
         this.velocity.addScaledVector(this.acceleration, dt);
         this.position.addScaledVector(this.velocity, dt);
+        
+        // OPTIMIZATION: Single position update per frame
         this.mesh.position.copy(this.position);
         
         this.angularVelocity.addScaledVector(this.angularAcceleration, dt);
@@ -361,8 +345,7 @@ class PhysicsObject {
         if (!triangleMesh.bvh || triangleMesh.triangles.length === 0) return;
         
         // Calculate swept path
-        const velocity = this.velocity.clone();
-        const displacement = velocity.clone().multiplyScalar(dt);
+        const displacement = this.velocity.clone().multiplyScalar(dt);
         const displacementLength = displacement.length();
         
         // If moving fast, use swept collision detection (CCD)
@@ -374,59 +357,51 @@ class PhysicsObject {
             this.discreteCollision(triangleMesh, dt);
         }
     }
-sweptCollision(triangleMesh, displacement, dt) {
-    const startPos = this.position.clone();
-    const endPos = startPos.clone().add(displacement);
-    const direction = displacement.clone().normalize();
-    const distance = displacement.length();
-    
-    // Expand query radius to include entire swept path
-    const queryRadius = this.radius + distance;
-    const queryCenter = startPos.clone().add(endPos).multiplyScalar(0.5);
-    
-    const candidateTriangles = triangleMesh.bvh.querySphere(
-        triangleMesh.bvh.root,
-        queryCenter,
-        queryRadius
-    );
-    
-    if (candidateTriangles.length === 0) return;
-    
-    let earliestHit = null;
-    let earliestTime = 1.0;
-    
-    // Check each triangle for swept collision
-    for (const tri of candidateTriangles) {
-        const hit = this.sweepSphereTriangle(startPos, direction, distance, tri);
-        if (hit && hit.t < earliestTime) {
-            earliestTime = hit.t;
-            earliestHit = hit;
+
+    sweptCollision(triangleMesh, displacement, dt) {
+        const startPos = this.position.clone();
+        const direction = displacement.clone().normalize();
+        const distance = displacement.length();
+        
+        // Expand query radius to include entire swept path
+        const queryRadius = this.radius + distance;
+        const queryCenter = startPos.clone().add(displacement.clone().multiplyScalar(0.5));
+        
+        const candidateTriangles = triangleMesh.bvh.querySphere(
+            triangleMesh.bvh.root,
+            queryCenter,
+            queryRadius
+        );
+        
+        if (candidateTriangles.length === 0) return;
+        
+        let earliestHit = null;
+        let earliestTime = 1.0;
+        
+        // Check each triangle for swept collision
+        for (const tri of candidateTriangles) {
+            const hit = this.sweepSphereTriangle(startPos, direction, distance, tri);
+            if (hit && hit.t < earliestTime) {
+                earliestTime = hit.t;
+                earliestHit = hit;
+            }
+        }
+        
+        if (earliestHit) {
+            // Move to collision point with small safety margin
+            const safetyMargin = 0.002;
+            const travelDistance = Math.max(0, earliestTime * distance - safetyMargin);
+            const safePosition = startPos.clone().add(direction.clone().multiplyScalar(travelDistance));
+            
+            // OPTIMIZATION: Don't update mesh.position here, wait for update()
+            this.position.copy(safePosition);
+            
+            // Apply collision response
+            this.handleCollisionResponse(earliestHit, triangleMesh);
         }
     }
-    
-    if (earliestHit) {
-        // IMPROVED: Move to collision point with small safety margin
-        const safetyMargin = 0.002; // Very small margin
-        const travelDistance = Math.max(0, earliestTime * distance - safetyMargin);
-        const safePosition = startPos.clone().add(direction.clone().multiplyScalar(travelDistance));
-        
-        this.position.copy(safePosition);
-        this.mesh.position.copy(this.position);
-        
-        // Apply collision response
-        this.handleCollisionResponse(earliestHit, triangleMesh);
-        
-        // CRITICAL: Don't let one collision check apply multiple times
-        // The collision is now resolved, don't check again this frame
-    }
-}
+
     sweepSphereTriangle(startPos, direction, distance, tri) {
-        // OPTIMIZATION 1: Early AABB check
-        const sweepAABB = this._getSweptAABB(startPos, direction, distance);
-        if (!this._aabbIntersectsAABB(sweepAABB, tri.aabb)) {
-            return null;
-        }
-        
         // Check if already intersecting at start
         const startClosest = tri.closestPointToPoint(startPos);
         const startDist = startPos.distanceTo(startClosest);
@@ -446,7 +421,7 @@ sweptCollision(triangleMesh, displacement, dt) {
             };
         }
         
-        // OPTIMIZATION 2: Back-face culling for swept tests
+        // Back-face culling for swept tests
         const planeNormal = tri.normal;
         const denominator = direction.dot(planeNormal);
         
@@ -486,33 +461,8 @@ sweptCollision(triangleMesh, displacement, dt) {
         };
     }
 
-    // Helper methods for AABB checks
-    _getSweptAABB(startPos, direction, distance) {
-        const endPos = startPos.clone().add(direction.clone().multiplyScalar(distance));
-        
-        return {
-            min: new THREE.Vector3(
-                Math.min(startPos.x, endPos.x) - this.radius,
-                Math.min(startPos.y, endPos.y) - this.radius,
-                Math.min(startPos.z, endPos.z) - this.radius
-            ),
-            max: new THREE.Vector3(
-                Math.max(startPos.x, endPos.x) + this.radius,
-                Math.max(startPos.y, endPos.y) + this.radius,
-                Math.max(startPos.z, endPos.z) + this.radius
-            )
-        };
-    }
-
-    _aabbIntersectsAABB(a, b) {
-        return (a.min.x <= b.max.x && a.max.x >= b.min.x) &&
-            (a.min.y <= b.max.y && a.max.y >= b.min.y) &&
-            (a.min.z <= b.max.z && a.max.z >= b.min.z);
-    }
-
     /**
      * Discrete collision detection - used for slow-moving objects
-     * Original collision detection method
      */
     discreteCollision(triangleMesh, dt) {
         const candidateTriangles = triangleMesh.bvh.querySphere(
@@ -550,29 +500,32 @@ sweptCollision(triangleMesh, displacement, dt) {
         
         if (contacts.length === 0) return;
         
-        // Handle deepest penetration first
-        contacts.sort((a, b) => b.penetration - a.penetration);
-        const contact = contacts[0];
+        // OPTIMIZATION: Find deepest penetration without sorting
+        let deepest = contacts[0];
+        for (let i = 1; i < contacts.length; i++) {
+            if (contacts[i].penetration > deepest.penetration) {
+                deepest = contacts[i];
+            }
+        }
         
-        this.handleCollisionResponse(contact, triangleMesh);
+        this.handleCollisionResponse(deepest, triangleMesh);
     }
+
     /**
      * Handle collision response - applies physics response to collision
-     * Extracted for reuse between CCD and discrete collision
      */
     handleCollisionResponse(contact, triangleMesh) {
         const velAlongNormal = this.velocity.dot(contact.normal);
         
-        // CRITICAL: Only correct position if we're actually penetrating significantly
-        // Small penetrations are handled by velocity changes only
+        // Only correct position if penetrating significantly
         const penetrationThreshold = 0.001;
         
         if (contact.penetration > penetrationThreshold) {
-            // Smooth position correction - don't teleport the full amount
-            const correctionFactor = 0.8; // Only correct 80% per frame for smoothness
+            // Smooth position correction
+            const correctionFactor = 0.8;
             const correction = contact.penetration * correctionFactor;
+            // OPTIMIZATION: Don't update mesh here, let update() do it
             this.position.addScaledVector(contact.normal, correction);
-            this.mesh.position.copy(this.position);
         }
         
         // Only apply collision response if actually moving into surface
@@ -625,9 +578,8 @@ sweptCollision(triangleMesh, displacement, dt) {
             
         } else if (velAlongNormal < 0.1 && contact.penetration < 0.05) {
             // Resting contact - gently remove sinking velocity
-            // Don't fully zero it to avoid jitter
             const normalVel = contact.normal.clone().multiplyScalar(velAlongNormal);
-            this.velocity.sub(normalVel.multiplyScalar(0.5)); // Only remove 50%
+            this.velocity.sub(normalVel.multiplyScalar(0.5));
         }
     }
 
@@ -658,14 +610,6 @@ sweptCollision(triangleMesh, displacement, dt) {
         this.mesh.rotation.z += z;
         this.mesh.updateMatrixWorld(true);
         this.rebuildCollisionMesh();
-    }
-
-    getRotation() {
-        return {
-            x: this.mesh.rotation.x,
-            y: this.mesh.rotation.y,
-            z: this.mesh.rotation.z
-        };
     }
 
     /**
@@ -701,23 +645,6 @@ sweptCollision(triangleMesh, displacement, dt) {
         this.rebuildCollisionMesh();
     }
 
-    getTranslation() {
-        // Returns position in local space relative to initial position
-        return {
-            x: this.mesh.position.x,
-            y: this.mesh.position.y,
-            z: this.mesh.position.z
-        };
-    }
-
-    /**
-     * Convert local space coordinates to world space
-     */
-    convertLocalSpaceToWorld(x, y, z) {
-        const localPoint = new THREE.Vector3(x, y, z);
-        return localPoint.applyMatrix4(this.mesh.matrixWorld);
-    }
-
     /**
      * Rebuild collision mesh - forces BVH rebuild for static objects
      * Called after transformations to ensure collision mesh matches visual mesh
@@ -727,6 +654,9 @@ sweptCollision(triangleMesh, displacement, dt) {
         this.triangles = [];
         this.bvh = null;
         this.bvhBuilt = false;
+        
+        // OPTIMIZATION: Invalidate cached matrix
+        this.cachedWorldMatrix = null;
         
         // Rebuild from current mesh state
         this.buildTriangleMesh();

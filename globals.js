@@ -16,5 +16,6 @@ export const GLOBALS = {
     player: {
         score: 0,
         PhysicsObject: null
-    }
+    },
+    time: 0
 };

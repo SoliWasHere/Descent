@@ -15,6 +15,10 @@ html, body {
   height: 100%;
 }
 
+div {
+  font-size: 20px;
+}
+
 #scene {
   background: red; /* Temporary background color for visibility */
   width: 100%;

@@ -5,7 +5,7 @@ export class CameraController {
         this.camera = camera;
         this.currentPosition = new THREE.Vector3();
         this.currentLookAt = new THREE.Vector3();
-        this.lerpFactor = 0.1; // Smoothness (0.05 = very smooth, 0.2 = responsive)
+        this.lerpFactor = 1; // Smoothness (0.05 = very smooth, 0.2 = responsive)
         this.raycaster = new THREE.Raycaster();
     }
 
