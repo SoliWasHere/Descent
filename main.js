@@ -8,6 +8,14 @@ import { GameLogic } from './gamelogic.js';
 import { PostProcessing } from './postprocessing.js';
 import { GLOBALS } from './globals.js';
 
+/*
+// Import BufferGeometryUtils for merging geometries
+import { BufferGeometryUtils } from 'https://unpkg.com/three@0.181.0/examples/jsm/utils/BufferGeometryUtils.js';
+
+// Make it available on THREE
+THREE.BufferGeometryUtils = BufferGeometryUtils;
+*/
+
 // FPS display
 const fpsElement = document.getElementById("FPS");
 let lastFPSUpdate = 0;
