@@ -12,9 +12,9 @@ export class CameraController {
     followTarget(target, cameraDisplace, floors = []) {
         // Calculate desired camera position
         const desiredPosition = new THREE.Vector3(
-            target.x + Math.sin(cameraDisplace[0] / 20) * 30,
+            target.x + Math.sin(cameraDisplace[0] / 20) * 5,
             target.y + 7 + cameraDisplace[1],
-            target.z + Math.cos(cameraDisplace[0] / 20) * 30
+            target.z + Math.cos(cameraDisplace[0] / 20) * 5
         );
 
         // Check for occlusion and adjust camera position if needed

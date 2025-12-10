@@ -97,14 +97,15 @@ export function stressTest(floorManager, profiler) {
 export function checkCollisionsWithProfiling(floorManager, sphere, dt, profiler) {
     const queryRadius = sphere.radius + 30;
     
-    // Query spatial grid
     const nearbyFloors = floorManager.spatialGrid.queryNearby(sphere.position, queryRadius);
     
     profiler.collisionStats.floorsChecked = floorManager.floors.length;
     profiler.collisionStats.floorsCulled = floorManager.floors.length - nearbyFloors.size;
     profiler.collisionStats.nearbyFloors = nearbyFloors.size;
     
-    // Check only nearby floors
+    // NEW: Collect all potential collision floors
+    const collidingFloors = [];
+    
     for (const floor of nearbyFloors) {
         const floorPos = floor.position;
         const halfDims = floor.dimensions ? floor.dimensions.clone().multiplyScalar(0.5) : new THREE.Vector3(5, 0.5, 5);
@@ -129,8 +130,26 @@ export function checkCollisionsWithProfiling(floorManager, sphere, dt, profiler)
         const checkRadius = sphere.radius + margin;
         
         if (distSq < checkRadius * checkRadius) {
-            sphere.collideWithTriangleMesh(floor, dt);
+            collidingFloors.push(floor);
         }
+    }
+    
+    // NEW: Only collide with ONE floor - the closest one
+    if (collidingFloors.length > 0) {
+        // Find closest floor
+        let closestFloor = collidingFloors[0];
+        let minDist = sphere.position.distanceTo(closestFloor.position);
+        
+        for (let i = 1; i < collidingFloors.length; i++) {
+            const dist = sphere.position.distanceTo(collidingFloors[i].position);
+            if (dist < minDist) {
+                minDist = dist;
+                closestFloor = collidingFloors[i];
+            }
+        }
+        
+        // Only process collision with closest floor
+        sphere.collideWithTriangleMesh(closestFloor, dt);
     }
 }
 

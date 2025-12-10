@@ -793,8 +793,8 @@ export class SphereManager {
             new THREE.SphereGeometry(1, 24, 24),
             createRotatingMaterial(),
             1,
-            new THREE.Vector3(0, 5, 0),
-            new THREE.Vector3(5, 5, 0)
+            new THREE.Vector3(0, 15, 0),
+            new THREE.Vector3(5, 15, 0)
         );
             
         sphere.friction = 1;

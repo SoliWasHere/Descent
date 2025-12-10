@@ -16,7 +16,7 @@ export function createScene(canvas) {
 
     // Camera
     const camera = new THREE.PerspectiveCamera(
-        50,
+        100,
         window.innerWidth / window.innerHeight,
         0.1,
         10000

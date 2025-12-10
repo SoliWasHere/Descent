@@ -249,8 +249,9 @@ class PhysicsObject {
         this.bvh = null;
         this.bvhBuilt = false;
         
-        // OPTIMIZATION: Cache world matrix for static objects
         this.cachedWorldMatrix = null;
+        this.floorNormal = null;
+        this.useFloorNormal = false;
         
         this.mesh.position.copy(this.position);
     }
@@ -264,7 +265,6 @@ class PhysicsObject {
         
         if (!positionAttribute) return;
         
-        // OPTIMIZATION: Use cached matrix for static objects
         let worldMatrix;
         if (this.isStatic && this.cachedWorldMatrix) {
             worldMatrix = this.cachedWorldMatrix;
@@ -272,7 +272,6 @@ class PhysicsObject {
             this.mesh.updateMatrixWorld(true);
             worldMatrix = this.mesh.matrixWorld;
             
-            // Cache for static objects
             if (this.isStatic) {
                 this.cachedWorldMatrix = worldMatrix.clone();
             }
@@ -300,6 +299,29 @@ class PhysicsObject {
             }
         }
         
+        if (this.isStatic && this.triangles.length > 0) {
+            const avgNormal = new THREE.Vector3();
+            for (const tri of this.triangles) {
+                avgNormal.add(tri.normal);
+            }
+            avgNormal.normalize();
+            
+            let isFlat = true;
+            const threshold = 0.999;
+            
+            for (const tri of this.triangles) {
+                if (tri.normal.dot(avgNormal) < threshold) {
+                    isFlat = false;
+                    break;
+                }
+            }
+            
+            if (isFlat) {
+                this.floorNormal = avgNormal;
+                this.useFloorNormal = true;
+            }
+        }
+        
         if (this.isStatic && this.triangles.length > 0 && !this.bvhBuilt) {
             this.bvh = new BVH(this.triangles);
             this.bvhBuilt = true;
@@ -312,7 +334,6 @@ class PhysicsObject {
         this.velocity.addScaledVector(this.acceleration, dt);
         this.position.addScaledVector(this.velocity, dt);
         
-        // OPTIMIZATION: Single position update per frame
         this.mesh.position.copy(this.position);
         
         this.angularVelocity.addScaledVector(this.angularAcceleration, dt);
@@ -338,132 +359,12 @@ class PhysicsObject {
         }
     }
     
-    /**
-     * Main collision detection - uses CCD for fast-moving objects
-     */
     collideWithTriangleMesh(triangleMesh, dt) {
         if (!triangleMesh.bvh || triangleMesh.triangles.length === 0) return;
         
-        // Calculate swept path
-        const displacement = this.velocity.clone().multiplyScalar(dt);
-        const displacementLength = displacement.length();
-        
-        // If moving fast, use swept collision detection (CCD)
-        // Threshold: if we move more than half our radius per frame, use CCD
-        if (displacementLength > this.radius * 0.5) {
-            this.sweptCollision(triangleMesh, displacement, dt);
-        } else {
-            // Use discrete collision for slow-moving objects
-            this.discreteCollision(triangleMesh, dt);
-        }
+        this.discreteCollision(triangleMesh, dt);
     }
 
-    sweptCollision(triangleMesh, displacement, dt) {
-        const startPos = this.position.clone();
-        const direction = displacement.clone().normalize();
-        const distance = displacement.length();
-        
-        // Expand query radius to include entire swept path
-        const queryRadius = this.radius + distance;
-        const queryCenter = startPos.clone().add(displacement.clone().multiplyScalar(0.5));
-        
-        const candidateTriangles = triangleMesh.bvh.querySphere(
-            triangleMesh.bvh.root,
-            queryCenter,
-            queryRadius
-        );
-        
-        if (candidateTriangles.length === 0) return;
-        
-        let earliestHit = null;
-        let earliestTime = 1.0;
-        
-        // Check each triangle for swept collision
-        for (const tri of candidateTriangles) {
-            const hit = this.sweepSphereTriangle(startPos, direction, distance, tri);
-            if (hit && hit.t < earliestTime) {
-                earliestTime = hit.t;
-                earliestHit = hit;
-            }
-        }
-        
-        if (earliestHit) {
-            // Move to collision point with small safety margin
-            const safetyMargin = 0.002;
-            const travelDistance = Math.max(0, earliestTime * distance - safetyMargin);
-            const safePosition = startPos.clone().add(direction.clone().multiplyScalar(travelDistance));
-            
-            // OPTIMIZATION: Don't update mesh.position here, wait for update()
-            this.position.copy(safePosition);
-            
-            // Apply collision response
-            this.handleCollisionResponse(earliestHit, triangleMesh);
-        }
-    }
-
-    sweepSphereTriangle(startPos, direction, distance, tri) {
-        // Check if already intersecting at start
-        const startClosest = tri.closestPointToPoint(startPos);
-        const startDist = startPos.distanceTo(startClosest);
-        
-        if (startDist < this.radius) {
-            const penetration = this.radius - startDist;
-            const normal = startDist > 1e-6 
-                ? new THREE.Vector3().subVectors(startPos, startClosest).normalize()
-                : tri.normal.clone();
-            
-            return {
-                t: 0,
-                point: startClosest,
-                normal: normal,
-                penetration: penetration,
-                triangle: tri
-            };
-        }
-        
-        // Back-face culling for swept tests
-        const planeNormal = tri.normal;
-        const denominator = direction.dot(planeNormal);
-        
-        // If moving away from triangle, no collision
-        if (denominator > -1e-6) {
-            return null;
-        }
-        
-        const d = planeNormal.dot(tri.v0);
-        const distToPlane = (d - planeNormal.dot(startPos)) / denominator;
-        
-        if (distToPlane < -this.radius || distToPlane > distance + this.radius) {
-            return null;
-        }
-        
-        const t = Math.max(0, Math.min(1, (distToPlane - this.radius) / distance));
-        const sphereCenter = startPos.clone().add(direction.clone().multiplyScalar(t * distance));
-        
-        const closestPoint = tri.closestPointToPoint(sphereCenter);
-        const distToClosest = sphereCenter.distanceTo(closestPoint);
-        
-        if (distToClosest > this.radius + 0.01) {
-            return null;
-        }
-        
-        const penetration = this.radius - distToClosest;
-        const normal = distToClosest > 1e-6
-            ? new THREE.Vector3().subVectors(sphereCenter, closestPoint).normalize()
-            : planeNormal.clone();
-        
-        return {
-            t: t,
-            point: closestPoint,
-            normal: normal,
-            penetration: Math.max(0, penetration),
-            triangle: tri
-        };
-    }
-
-    /**
-     * Discrete collision detection - used for slow-moving objects
-     */
     discreteCollision(triangleMesh, dt) {
         const candidateTriangles = triangleMesh.bvh.querySphere(
             triangleMesh.bvh.root,
@@ -500,7 +401,6 @@ class PhysicsObject {
         
         if (contacts.length === 0) return;
         
-        // OPTIMIZATION: Find deepest penetration without sorting
         let deepest = contacts[0];
         for (let i = 1; i < contacts.length; i++) {
             if (contacts[i].penetration > deepest.penetration) {
@@ -512,41 +412,39 @@ class PhysicsObject {
     }
 
     /**
-     * Handle collision response - applies physics response to collision
+     * REAL FIX: Don't let velocity reflection cause bouncing
      */
     handleCollisionResponse(contact, triangleMesh) {
-        const velAlongNormal = this.velocity.dot(contact.normal);
+        let effectiveNormal = contact.normal;
         
-        // Only correct position if penetrating significantly
-        const penetrationThreshold = 0.001;
-        
-        if (contact.penetration > penetrationThreshold) {
-            // Smooth position correction
-            const correctionFactor = 0.8;
-            const correction = contact.penetration * correctionFactor;
-            // OPTIMIZATION: Don't update mesh here, let update() do it
-            this.position.addScaledVector(contact.normal, correction);
+        if (triangleMesh.useFloorNormal && triangleMesh.floorNormal) {
+            effectiveNormal = triangleMesh.floorNormal;
         }
         
-        // Only apply collision response if actually moving into surface
-        if (velAlongNormal < -0.001) {
-            // Split velocity into normal and tangent components
-            const vNormal = contact.normal.clone().multiplyScalar(velAlongNormal);
+        // Correct position - push sphere out completely
+        if (contact.penetration > 0.0001) {
+            this.position.addScaledVector(effectiveNormal, contact.penetration);
+        }
+        
+        const velAlongNormal = this.velocity.dot(effectiveNormal);
+        
+        // CRITICAL: Only modify velocity if CLEARLY moving into surface
+        // Use a larger threshold to prevent oscillation
+        if (velAlongNormal < -0.01) {
+            const vNormal = effectiveNormal.clone().multiplyScalar(velAlongNormal);
             const vTangent = this.velocity.clone().sub(vNormal);
             
             const restitution = Math.min(this.restitution, triangleMesh.restitution);
-            
-            // Reflect normal velocity with restitution
-            const reflectedNormalSpeed = -velAlongNormal * restitution;
-            const newVNormal = contact.normal.clone().multiplyScalar(reflectedNormalSpeed);
-            
-            // Apply friction to tangent velocity
             const friction = Math.min(this.friction, triangleMesh.friction);
             
+            // Reflect normal component
+            let newNormalSpeed = -velAlongNormal * restitution;
+            
+            // Apply friction
             if (friction > 0.001) {
                 const vRoll = new THREE.Vector3().crossVectors(
                     this.angularVelocity, 
-                    contact.normal
+                    effectiveNormal
                 ).multiplyScalar(this.radius);
                 
                 const vSlip = vTangent.clone().sub(vRoll);
@@ -561,31 +459,22 @@ class PhysicsObject {
                                                 (this.momentOfInertia / this.mass);
                     const frictionImpulse = Math.min(slipSpeed / inertiaFactor, maxFriction);
                     
-                    // Apply friction to tangent velocity
                     vTangent.addScaledVector(slipDir, -frictionImpulse);
                     
-                    // Apply torque from friction
                     const torque = new THREE.Vector3().crossVectors(
-                        contact.normal.clone().multiplyScalar(-this.radius),
+                        effectiveNormal.clone().multiplyScalar(-this.radius),
                         slipDir.clone().multiplyScalar(-frictionImpulse * this.mass)
                     );
                     this.angularVelocity.add(torque.divideScalar(this.momentOfInertia));
                 }
             }
             
-            // Combine corrected velocities
-            this.velocity.copy(newVNormal.add(vTangent));
-            
-        } else if (velAlongNormal < 0.1 && contact.penetration < 0.05) {
-            // Resting contact - gently remove sinking velocity
-            const normalVel = contact.normal.clone().multiplyScalar(velAlongNormal);
-            this.velocity.sub(normalVel.multiplyScalar(0.5));
+            // Rebuild velocity
+            this.velocity.copy(vTangent);
+            this.velocity.addScaledVector(effectiveNormal, newNormalSpeed);
         }
     }
 
-    /**
-     * Rotation methods
-     */
     rotateX(angle) {
         this.mesh.rotateX(angle);
         this.mesh.updateMatrixWorld(true);
@@ -612,9 +501,6 @@ class PhysicsObject {
         this.rebuildCollisionMesh();
     }
 
-    /**
-     * Translation methods (local space)
-     */
     translateX(distance) {
         this.mesh.translateX(distance);
         this.position.copy(this.mesh.position);
@@ -645,20 +531,14 @@ class PhysicsObject {
         this.rebuildCollisionMesh();
     }
 
-    /**
-     * Rebuild collision mesh - forces BVH rebuild for static objects
-     * Called after transformations to ensure collision mesh matches visual mesh
-     */
     rebuildCollisionMesh() {
-        // Clear existing collision data
         this.triangles = [];
         this.bvh = null;
         this.bvhBuilt = false;
-        
-        // OPTIMIZATION: Invalidate cached matrix
+        this.floorNormal = null;
+        this.useFloorNormal = false;
         this.cachedWorldMatrix = null;
         
-        // Rebuild from current mesh state
         this.buildTriangleMesh();
     }
 }
